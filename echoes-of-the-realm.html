@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Echoes of the Realm</title>
+<style>
+  :root{
+    --void:#0b0a12; --void2:#15131f;
+    --thunder:#e8b33a; --thunder-hi:#ffe9a8;
+    --arcane:#6e5cc4; --blood:#9c2f2f;
+    --parchment:#cfc2a6; --ink:#1a1410;
+    --hp:#b83232; --mp:#3a6ee8; --st:#3aa860;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--void);color:var(--parchment);
+    font-family:Georgia,'Times New Roman',serif}
+  #c{position:fixed;inset:0;display:block}
+  .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:radial-gradient(ellipse at 50% 30%,#1c1830 0%,var(--void) 70%);z-index:50;padding:24px;text-align:center}
+  .hidden{display:none!important}
+  h1.title{font-size:clamp(28px,8vw,56px);letter-spacing:.18em;text-transform:uppercase;
+    color:var(--thunder);text-shadow:0 0 24px rgba(232,179,58,.45),0 0 60px rgba(232,179,58,.2);font-weight:400}
+  .subtitle{letter-spacing:.4em;text-transform:uppercase;font-size:11px;color:var(--arcane);margin-top:10px}
+  .rune-divider{width:160px;height:1px;background:linear-gradient(90deg,transparent,var(--thunder),transparent);margin:22px auto;position:relative}
+  .rune-divider::after{content:"✦";position:absolute;left:50%;top:-9px;transform:translateX(-50%);color:var(--thunder);font-size:12px}
+  button.btn{background:transparent;border:1px solid var(--thunder);color:var(--thunder);
+    font-family:inherit;letter-spacing:.25em;text-transform:uppercase;font-size:13px;
+    padding:14px 34px;cursor:pointer;margin:8px;transition:all .25s;position:relative}
+  button.btn:hover,button.btn:active{background:rgba(232,179,58,.12);box-shadow:0 0 18px rgba(232,179,58,.3)}
+  button.btn.ghost{border-color:#5a5470;color:#8d86a5}
+  .small{font-size:12px;color:#8d86a5;max-width:480px;line-height:1.6;margin-top:14px}
+  /* ---------- companion dialogue ---------- */
+  #dlg{position:fixed;left:50%;bottom:max(215px,calc(env(safe-area-inset-bottom) + 205px));transform:translateX(-50%);
+    width:min(640px,92vw);background:linear-gradient(180deg,rgba(20,17,32,.92),rgba(11,10,18,.95));
+    border:1px solid rgba(232,179,58,.5);border-left:3px solid var(--thunder);padding:14px 18px;z-index:40;
+    box-shadow:0 0 30px rgba(232,179,58,.12);display:none}
+  #dlg .who{color:var(--thunder);font-size:10px;letter-spacing:.35em;text-transform:uppercase;margin-bottom:6px}
+  #dlg .txt{font-size:15px;line-height:1.55;font-style:italic;min-height:42px}
+  #dlg .tap{font-size:10px;color:#6e6786;text-align:right;margin-top:6px;letter-spacing:.2em}
+  /* ---------- HUD ---------- */
+  #hud{position:fixed;inset:0;pointer-events:none;z-index:30;display:none}
+  .bars{position:absolute;top:max(14px,env(safe-area-inset-top));left:14px;width:min(46vw,240px)}
+  .bar{height:10px;background:#000a;border:1px solid #0008;margin-bottom:5px;position:relative;overflow:hidden}
+  .bar>i{position:absolute;inset:0;transform-origin:left;transition:transform .25s}
+  #hpbar>i{background:linear-gradient(180deg,#d44,var(--hp))}
+  #mpbar>i{background:linear-gradient(180deg,#58e,var(--mp))}
+  #stbar>i{background:linear-gradient(180deg,#5c6,var(--st))}
+  #compass{position:absolute;top:max(14px,env(safe-area-inset-top));right:14px;text-align:right;font-size:12px;color:var(--parchment)}
+  #compass .dist{font-size:20px;color:var(--thunder)}
+  #compass .arrow{font-size:30px;display:inline-block;transition:transform .2s;color:var(--thunder);text-shadow:0 0 12px rgba(232,179,58,.6)}
+  #objective{position:absolute;top:calc(max(14px,env(safe-area-inset-top)) + 64px);left:14px;max-width:60vw;
+    font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#9f96b8}
+  #bossbar{position:absolute;left:50%;transform:translateX(-50%);bottom:max(190px,calc(env(safe-area-inset-bottom) + 180px));width:min(560px,86vw);display:none}
+  #bossbar .name{text-align:center;font-size:13px;letter-spacing:.3em;text-transform:uppercase;color:var(--thunder);margin-bottom:4px}
+  #bossbar .bar{height:8px}
+  #bossbar .bar>i{background:linear-gradient(180deg,#e8b33a,#9c2f2f)}
+  /* combat controls */
+  #controls{position:absolute;right:14px;bottom:max(20px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;align-items:flex-end;pointer-events:auto}
+  .ctl{width:64px;height:64px;border-radius:50%;border:1px solid rgba(232,179,58,.6);background:rgba(11,10,18,.66);
+    color:var(--thunder);font-family:inherit;font-size:10px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+  .ctl:active{background:rgba(232,179,58,.25)}
+  .ctl.big{width:80px;height:80px;font-size:11px}
+  #leftctl{position:absolute;left:14px;bottom:max(20px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+  #hint{position:absolute;left:50%;bottom:max(96px,env(safe-area-inset-bottom));transform:translateX(-50%);
+    font-size:12px;letter-spacing:.15em;color:#cfc2a6;text-shadow:0 1px 4px #000;text-align:center;width:92vw}
+  /* inventory */
+  #inv{position:fixed;inset:0;z-index:45;background:rgba(7,6,12,.94);display:none;flex-direction:column;padding:18px;overflow:auto}
+  #inv h2{color:var(--thunder);letter-spacing:.3em;text-transform:uppercase;font-size:15px;font-weight:400;text-align:center;margin:6px 0 4px}
+  .invgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:14px}
+  .item{border:1px solid #3a3450;background:var(--void2);padding:10px;font-size:12px;cursor:pointer}
+  .item .nm{color:var(--thunder-hi);margin-bottom:4px}
+  .item .ds{color:#8d86a5;font-size:11px;line-height:1.4}
+  .item.equipped{border-color:var(--thunder);box-shadow:0 0 10px rgba(232,179,58,.25)}
+  .slotline{font-size:11px;color:#9f96b8;text-align:center;margin-top:6px;letter-spacing:.1em}
+  /* notes / tutorial / panels */
+  .panel{max-width:680px;width:94vw;max-height:80vh;overflow:auto;background:var(--void2);border:1px solid #3a3450;padding:22px;text-align:left}
+  .panel h3{color:var(--thunder);font-weight:400;letter-spacing:.2em;text-transform:uppercase;font-size:14px;margin-bottom:10px}
+  .panel p,.panel li{font-size:14px;line-height:1.65;color:var(--parchment)}
+  .panel ul{padding-left:18px;margin:8px 0}
+  .gearcat{color:var(--arcane);letter-spacing:.2em;text-transform:uppercase;font-size:11px;margin-top:14px}
+  .note-paper{background:linear-gradient(180deg,#d8caa8,#c4b48e);color:var(--ink);padding:20px;font-style:italic;line-height:1.7;font-size:14px;box-shadow:0 6px 24px #000a}
+  .note-paper h4{font-style:normal;letter-spacing:.15em;text-transform:uppercase;font-size:12px;margin-bottom:8px;color:#4a3214}
+  #loadingTxt{margin-top:18px;font-size:12px;letter-spacing:.25em;text-transform:uppercase;color:var(--arcane);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+  .spark{display:inline-block;animation:flick .12s infinite alternate}
+  @keyframes flick{from{opacity:.6;transform:translateY(0)}to{opacity:1;transform:translateY(-2px)}}
+  #toast{position:fixed;top:18%;left:50%;transform:translateX(-50%);background:rgba(11,10,18,.9);
+    border:1px solid var(--thunder);color:var(--thunder-hi);padding:10px 22px;font-size:13px;letter-spacing:.15em;
+    z-index:60;display:none;text-align:center}
+  #deathScreen{background:radial-gradient(ellipse at 50% 50%,#1a0505 0%,#000 80%)}
+  #deathScreen h1{color:var(--blood);text-shadow:0 0 40px #f003}
+  .spotlist{list-style:none;padding:0}
+  .spotlist li{border-left:2px solid var(--arcane);padding:8px 12px;margin:8px 0;background:var(--void2);font-size:13px}
+  .spotlist li b{color:var(--thunder-hi)}
+  .spotlist li span{color:#8d86a5;font-size:11px;display:block;margin-top:2px}
+  @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+  /* settings */
+  .setrow{margin:14px 0}
+  .setrow label{display:block;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--arcane);margin-bottom:6px}
+  .setrow label span{color:var(--thunder);float:right;letter-spacing:0}
+  .sethint{font-size:11px;color:#6e6786;margin-top:4px;line-height:1.5}
+  .setrow input[type=password],.setrow input[type=text]{width:100%;background:#0a0912;border:1px solid #3a3450;
+    color:var(--parchment);font-family:inherit;font-size:13px;padding:10px}
+  .setrow input[type=range]{width:100%;accent-color:var(--thunder);height:24px}
+  #brightOverlay{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;z-index:200}
+  .slotrow{border:1px solid #3a3450;background:var(--void2);padding:12px;margin:10px 0;font-size:13px;
+    display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .slotrow .meta{flex:1;min-width:180px}
+  .slotrow .meta b{color:var(--thunder-hi)}
+  .slotrow .meta span{display:block;color:#8d86a5;font-size:11px;margin-top:3px}
+  .slotrow button{padding:8px 14px;font-size:10px;margin:2px}
+  /* minimap */
+  #minimapWrap{position:absolute;top:calc(max(14px,env(safe-area-inset-top)) + 58px);right:14px;text-align:center;pointer-events:none}
+  #minimap{width:128px;height:128px;border-radius:50%;border:1px solid rgba(232,179,58,.55);
+    background:rgba(8,7,14,.7);box-shadow:0 0 18px rgba(232,179,58,.15)}
+  #mmDist{font-size:11px;color:var(--thunder);letter-spacing:.1em;margin-top:3px;text-shadow:0 1px 3px #000}
+  /* full map */
+  #mapScreen{position:fixed;inset:0;z-index:48;display:none;flex-direction:column;background:var(--void)}
+  #leafmap{flex:1;filter:grayscale(.5) brightness(.72) sepia(.25) hue-rotate(-15deg) saturate(1.4)}
+  #mapBar{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;
+    background:var(--void2);border-top:1px solid #3a3450}
+  #mapBar .info{font-size:12px;color:#9f96b8;letter-spacing:.08em}
+  .leaflet-container{background:#0b0a12}
+</style>
+</head>
+<body>
+<video id="camFeed" autoplay muted playsinline
+  style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover;display:none;z-index:0"></video>
+<canvas id="c" style="z-index:1"></canvas>
+
+<!-- ============ TITLE ============ -->
+<div id="titleScreen" class="screen">
+  <div class="subtitle">a legend written upon the land itself</div>
+  <h1 class="title">Echoes of<br>the Realm</h1>
+  <div class="rune-divider"></div>
+  <button class="btn" id="btnBegin">Begin the Pilgrimage</button>
+  <button class="btn" id="btnContinue" style="display:none">Continue a Pilgrimage</button>
+  <button class="btn ghost" id="btnDemo">Wander a Phantom Realm (no GPS)</button>
+  <button class="btn ghost" id="btnSettings">⚙ Settings</button>
+  <div class="small">The Herald — a thunder-light torn from the future — will weave a dark legend from the true
+  history of wherever you stand. Walk to real places. Slay what waits there. Face the Echo at the end.</div>
+</div>
+
+<!-- ============ LOADING / WEAVING ============ -->
+<div id="loadScreen" class="screen hidden">
+  <div style="font-size:46px" class="spark">⚡</div>
+  <div class="subtitle" style="margin-top:14px">the herald is reading your world</div>
+  <div id="loadingTxt">Locating your realm…</div>
+</div>
+
+<!-- ============ TUTORIAL / GEAR ============ -->
+<div id="gearScreen" class="screen hidden">
+  <div class="panel" id="gearPanel"></div>
+  <button class="btn" id="btnGearDone" style="margin-top:16px">I am prepared</button>
+</div>
+
+<!-- ============ QUEST MAP ============ -->
+<div id="questScreen" class="screen hidden">
+  <div class="panel" id="questPanel"></div>
+  <button class="btn" id="btnEnterAR" style="margin-top:16px">Enter the Realm (AR)</button>
+  <button class="btn ghost" id="btnEnterFlat">Enter without headset</button>
+</div>
+
+<!-- ============ DEATH ============ -->
+<div id="deathScreen" class="screen hidden">
+  <h1 class="title">You Faded</h1>
+  <div class="rune-divider"></div>
+  <div class="small">The Herald drags your echo back through time…</div>
+  <button class="btn" id="btnRespawn">Rise again</button>
+</div>
+
+<!-- ============ VICTORY ============ -->
+<div id="winScreen" class="screen hidden">
+  <h1 class="title" style="color:var(--thunder-hi)">Echo Silenced</h1>
+  <div class="rune-divider"></div>
+  <div class="panel" id="winPanel"></div>
+  <button class="btn" id="btnNewQuest" style="margin-top:14px">Seek a new legend</button>
+</div>
+
+<!-- ============ SETTINGS ============ -->
+<div id="settingsScreen" class="screen hidden" style="z-index:70">
+  <div class="panel" style="max-width:560px">
+    <h3>Settings</h3>
+    <div class="setrow"><label>Claude API key</label>
+      <input type="password" id="setApiKey" placeholder="sk-ant-… (leave empty inside Claude.ai)" autocomplete="off">
+      <div class="sethint">Used on Spectacles / standalone hosting to weave legends. Stored only on this device. Without a key the game falls back to the offline legend generator (or keyless mode when run as a Claude artifact).</div></div>
+    <div class="setrow"><label>Display brightness <span id="vBright"></span></label>
+      <input type="range" id="setBright" min="35" max="160" step="5"></div>
+    <div class="setrow"><label>Music volume <span id="vMusic"></span></label>
+      <input type="range" id="setMusic" min="0" max="100" step="5"></div>
+    <div class="setrow"><label>Effects volume <span id="vSfx"></span></label>
+      <input type="range" id="setSfx" min="0" max="100" step="5"></div>
+    <div class="setrow"><label>Herald text speed <span id="vText"></span></label>
+      <input type="range" id="setText" min="1" max="3" step="1"></div>
+    <div class="setrow"><label>Arrival radius (m) <span id="vRadius"></span></label>
+      <input type="range" id="setRadius" min="20" max="150" step="10">
+      <div class="sethint">How close to the real place you must be. Raise it if GPS is poor.</div></div>
+    <div class="setrow"><label>Hand-swing sensitivity <span id="vSwing"></span></label>
+      <input type="range" id="setSwing" min="1" max="4" step="0.5">
+      <div class="sethint">Lower = easier to trigger attacks on Spectacles hand tracking.</div></div>
+    <div class="setrow"><label>POI search radius (m) <span id="vPoi"></span></label>
+      <input type="range" id="setPoi" min="500" max="5000" step="250"></div>
+  </div>
+  <div><button class="btn" id="btnSettingsSave" style="margin-top:14px">Save</button>
+  <button class="btn ghost" id="btnSettingsClose">Back</button></div>
+</div>
+
+<!-- ============ SAVE SLOTS ============ -->
+<div id="savesScreen" class="screen hidden" style="z-index:69">
+  <div class="panel" style="max-width:560px">
+    <h3>Saved Pilgrimages</h3>
+    <div id="slotsList"></div>
+  </div>
+  <button class="btn ghost" id="btnSavesClose" style="margin-top:14px">Back</button>
+</div>
+
+<div id="brightOverlay"></div>
+
+<!-- ============ NOTE READER ============ -->
+<div id="noteScreen" class="screen hidden">
+  <div class="note-paper panel" id="notePaper"></div>
+  <button class="btn" id="btnNoteClose" style="margin-top:14px">Fold the note</button>
+</div>
+
+<!-- ============ INVENTORY ============ -->
+<div id="inv">
+  <h2>Satchel</h2>
+  <div class="slotline" id="slotline"></div>
+  <div class="invgrid" id="invgrid"></div>
+  <div style="text-align:center;margin-top:16px"><button class="btn" id="btnInvClose">Close</button></div>
+</div>
+
+<!-- ============ HUD ============ -->
+<div id="hud">
+  <div class="bars">
+    <div class="bar" id="hpbar"><i></i></div>
+    <div class="bar" id="mpbar"><i></i></div>
+    <div class="bar" id="stbar"><i></i></div>
+  </div>
+  <div id="compass"><span class="arrow" id="arrow">➤</span><br><span class="dist" id="dist">—</span><br><span id="spotname"></span></div>
+  <div id="minimapWrap"><canvas id="minimap" width="256" height="256"></canvas><div id="mmDist"></div></div>
+  <div id="objective"></div>
+  <div id="bossbar"><div class="name" id="bossname"></div><div class="bar"><i id="bossfill"></i></div></div>
+  <div id="hint"></div>
+  <div id="controls">
+    <button class="ctl big" id="btnAtk">Strike</button>
+    <button class="ctl" id="btnSpecial">Scroll</button>
+    <button class="ctl" id="btnDodge">Dodge</button>
+  </div>
+  <div id="leftctl">
+    <button class="ctl" id="btnInv">Satchel</button>
+    <button class="ctl" id="btnPotH">HP ◆</button>
+    <button class="ctl" id="btnPotM">MP ◆</button>
+    <button class="ctl" id="btnArrive">I have arrived</button>
+    <button class="ctl" id="btnMap">Map</button>
+  </div>
+</div>
+
+<div id="mapScreen">
+  <div id="leafmap"></div>
+  <div id="mapBar"><div class="info" id="mapInfo"></div><button class="btn" id="btnMapClose" style="margin:0;padding:10px 22px">Close</button></div>
+</div>
+<div id="dlg"><div class="who">⚡ THE HERALD</div><div class="txt" id="dlgTxt"></div><div class="tap">tap to continue ▸</div></div>
+<div id="toast"></div>
+<div id="dbg" style="position:fixed;left:0;right:0;bottom:0;max-height:42vh;overflow:auto;z-index:300;display:none;
+  background:rgba(0,0,0,.88);color:#7CFC9A;font:11px/1.5 monospace;padding:8px;white-space:pre-wrap;border-top:1px solid #444"></div>
+<button id="dbgBtn" style="position:fixed;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);
+  z-index:301;background:#0008;color:#888;border:1px solid #444;font-size:10px;padding:4px 10px;border-radius:10px">🐞</button>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* =====================================================================
+   ECHOES OF THE REALM — location-based WebXR soulslike
+   Targets: Snap Spectacles browser / Android Chrome (immersive-ar),
+   with a flat-screen fallback for development & non-XR phones.
+   ===================================================================== */
+"use strict";
+const $ = id => document.getElementById(id);
+/* ---- on-screen logger (🐞 button toggles) ---- */
+const LOGBUF=[];
+function log(...a){
+  const m=a.map(x=>typeof x==="object"?JSON.stringify(x):String(x)).join(" ");
+  LOGBUF.push(new Date().toISOString().slice(11,19)+" "+m);
+  if(LOGBUF.length>200)LOGBUF.shift();
+  const d=document.getElementById("dbg");
+  if(d&&d.style.display!=="none"){d.textContent=LOGBUF.join("\n");d.scrollTop=d.scrollHeight;}
+  try{console.log(...a);}catch(_){}
+}
+addEventListener("DOMContentLoaded",()=>{
+  $("dbgBtn").onclick=()=>{const d=$("dbg");
+    d.style.display=d.style.display==="none"?"block":"none";
+    d.textContent=LOGBUF.join("\n");d.scrollTop=d.scrollHeight;};
+});
+addEventListener("error",e=>{log("ERROR:",e.message,"@",e.filename&&e.filename.split("/").pop(),e.lineno);try{toast("⚠ "+e.message,6000);}catch(_){}});
+addEventListener("unhandledrejection",e=>{log("REJECTION:",e.reason&&e.reason.message||e.reason);try{toast("⚠ "+(e.reason&&e.reason.message||e.reason),6000);}catch(_){}});
+log("page loaded · secure:",window.isSecureContext,"· UA:",navigator.userAgent.slice(0,80));
+
+/* ---------------- game state ---------------- */
+const G = {
+  lat:null, lon:null, heading:0,
+  pois:[], legend:null, spots:[], spotIndex:0,
+  phase:"title",            // title→loading→gear→quest→travel→encounter→boss→win
+  player:{hp:100,hpMax:100,mp:50,mpMax:50,st:100,stMax:100,souls:0},
+  inv:[], equipped:{weapon:null,scroll:null},
+  enemies:[], loots:[], boss:null,
+  xr:false, demo:false,
+  encounterActive:false,
+};
+
+/* ---------------- helpers ---------------- */
+const rand=(a,b)=>a+Math.random()*(b-a);
+const choice=a=>a[Math.floor(Math.random()*a.length)];
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function toast(msg,ms=2200){const t=$("toast");t.textContent=msg;t.style.display="block";clearTimeout(t._t);t._t=setTimeout(()=>t.style.display="none",ms);}
+function show(id){$(id).classList.remove("hidden");}
+function hide(id){$(id).classList.add("hidden");}
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371000,toR=Math.PI/180;
+  const dLat=(lat2-lat1)*toR,dLon=(lon2-lon1)*toR;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*toR)*Math.cos(lat2*toR)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+function bearing(lat1,lon1,lat2,lon2){
+  const toR=Math.PI/180;
+  const y=Math.sin((lon2-lon1)*toR)*Math.cos(lat2*toR);
+  const x=Math.cos(lat1*toR)*Math.sin(lat2*toR)-Math.sin(lat1*toR)*Math.cos(lat2*toR)*Math.cos((lon2-lon1)*toR);
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+
+/* =====================================================================
+   0. PERSISTENCE, SETTINGS, AUDIO
+   localStorage when available (Spectacles browser / standalone hosting);
+   silent in-memory fallback (e.g. inside the Claude.ai artifact sandbox,
+   where browser storage is blocked — nothing persists there).
+   ===================================================================== */
+const Store=(()=>{
+  let ok=false;try{localStorage.setItem("_eotr_t","1");localStorage.removeItem("_eotr_t");ok=true;}catch(e){}
+  const mem={};
+  return {
+    persistent:ok,
+    get(k,d){try{const v=ok?localStorage.getItem(k):mem[k];return v==null?d:JSON.parse(v);}catch(e){return d;}},
+    set(k,v){try{const s=JSON.stringify(v);if(ok)localStorage.setItem(k,s);else mem[k]=s;}catch(e){}},
+    del(k){try{if(ok)localStorage.removeItem(k);else delete mem[k];}catch(e){}}
+  };
+})();
+
+const DEFAULTS={apiKey:"",bright:100,music:60,sfx:80,textSpeed:2,radius:60,swing:2.2,poi:1500};
+const Settings=Object.assign({},DEFAULTS,Store.get("eotr_settings",{}));
+function saveSettings(){Store.set("eotr_settings",Settings);applySettings();}
+function applySettings(){
+  // brightness: dim via black overlay below 100%, boost exposure above 100%
+  const b=Settings.bright;
+  $("brightOverlay").style.opacity=b<100?(1-b/100)*.85:0;
+  if(renderer)renderer.toneMappingExposure=Math.max(1,b/100);
+  Audio.setMusic(Settings.music/100);
+}
+
+/* --- ambient music + sfx (WebAudio, no assets needed) --- */
+const Audio=(()=>{
+  let ctx=null,musicGain=null,started=false;
+  function ensure(){
+    if(ctx)return true;
+    try{ctx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return false;}
+    musicGain=ctx.createGain();musicGain.gain.value=Settings.music/100*.35;musicGain.connect(ctx.destination);
+    return true;
+  }
+  function startMusic(){
+    if(started||!ensure())return;started=true;
+    // low drone: two detuned oscillators through a slow-wobbling filter
+    const f=ctx.createBiquadFilter();f.type="lowpass";f.frequency.value=220;f.connect(musicGain);
+    [55,55.7,82.4].forEach((hz,i)=>{
+      const o=ctx.createOscillator();o.type=i<2?"sawtooth":"triangle";o.frequency.value=hz;
+      const g=ctx.createGain();g.gain.value=i<2?.05:.03;o.connect(g);g.connect(f);o.start();
+    });
+    const lfo=ctx.createOscillator();lfo.frequency.value=.07;
+    const lg=ctx.createGain();lg.gain.value=140;lfo.connect(lg);lg.connect(f.frequency);lfo.start();
+    // sparse bell every ~14s
+    setInterval(()=>{if(Math.random()<.6)bell();},14000);
+  }
+  function bell(){
+    if(!ctx)return;
+    const o=ctx.createOscillator();o.type="sine";o.frequency.value=choice([196,233,261]);
+    const g=ctx.createGain();g.gain.setValueAtTime(.0001,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(Settings.music/100*.12+.0001,ctx.currentTime+.02);
+    g.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+4);
+    o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+4.2);
+  }
+  function sfx(kind){
+    if(!ensure()||Settings.sfx===0)return;
+    const v=Settings.sfx/100;
+    const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);
+    const t=ctx.currentTime;
+    const P={hit:[420,90,.12],hurt:[110,60,.2],loot:[660,880,.15],dodge:[300,500,.08],boss:[70,40,.3],ui:[520,520,.05]}[kind]||[440,440,.1];
+    o.type=kind==="loot"||kind==="ui"?"sine":"square";
+    o.frequency.setValueAtTime(P[0],t);o.frequency.exponentialRampToValueAtTime(P[1],t+.18);
+    g.gain.setValueAtTime(P[2]*v,t);g.gain.exponentialRampToValueAtTime(.0001,t+.25);
+    o.start(t);o.stop(t+.3);
+  }
+  return {startMusic,sfx,setMusic(v){if(musicGain)musicGain.gain.value=v*.35;}};
+})();
+
+/* --- save slots --- */
+const SLOT_KEY=n=>"eotr_save_"+n;
+function listSlots(){return Store.get("eotr_slots",[]);}
+function snapshot(){
+  return {legend:G.legend,spots:G.spots,spotIndex:G.spotIndex,player:G.player,
+    inv:G.inv,equippedW:G.equipped.weapon?G.equipped.weapon.id:null,
+    equippedS:G.equipped.scroll?G.equipped.scroll.id:null,
+    demo:G.demo,noteIdx:G._noteIdx||0,when:Date.now(),
+    region:G.legend?G.legend.regionName:"?"};
+}
+let activeSlot=null;
+function autosave(){
+  if(activeSlot==null||!G.legend)return;
+  Store.set(SLOT_KEY(activeSlot),snapshot());
+  const slots=listSlots();const m=slots.find(s=>s.n===activeSlot);
+  if(m){m.when=Date.now();m.region=G.legend.regionName;m.progress=`${Math.min(G.spotIndex+1,G.spots.length)}/${G.spots.length}`;m.souls=G.player.souls;Store.set("eotr_slots",slots);}
+}
+function newSlot(){
+  const slots=listSlots();
+  const n=(slots.reduce((a,s)=>Math.max(a,s.n),0)||0)+1;
+  slots.push({n,when:Date.now(),region:"…",progress:"0/?",souls:0});
+  Store.set("eotr_slots",slots);activeSlot=n;
+}
+function loadSlot(n){
+  const d=Store.get(SLOT_KEY(n),null);if(!d)return false;
+  activeSlot=n;
+  G.legend=d.legend;G.spots=d.spots;G.spotIndex=Math.min(d.spotIndex,d.spots.length-1);
+  G.player=d.player;G.inv=d.inv;G.demo=d.demo;G._noteIdx=d.noteIdx;
+  G.equipped.weapon=G.inv.find(i=>i.id===d.equippedW)||null;
+  G.equipped.scroll=G.inv.find(i=>i.id===d.equippedS)||null;
+  return true;
+}
+function deleteSlot(n){
+  Store.del(SLOT_KEY(n));
+  Store.set("eotr_slots",listSlots().filter(s=>s.n!==n));
+}
+function renderSlots(){
+  const list=$("slotsList");const slots=listSlots();
+  if(!Store.persistent){
+    list.innerHTML='<div class="sethint">Browser storage is unavailable in this environment (e.g. the Claude.ai artifact preview). Saves work when this file runs on Spectacles or any normal hosting.</div>';
+    return;
+  }
+  if(!slots.length){list.innerHTML='<div class="sethint">No saved pilgrimages yet. Begin one — it autosaves as you progress.</div>';return;}
+  list.innerHTML="";
+  for(const s of slots){
+    const row=document.createElement("div");row.className="slotrow";
+    row.innerHTML=`<div class="meta"><b>${s.region||"Unknown realm"}</b>
+      <span>Spot ${s.progress||"?"} · ${s.souls||0} echoes · ${new Date(s.when).toLocaleString()}</span></div>`;
+    const bL=document.createElement("button");bL.className="btn";bL.textContent="Load";
+    bL.onclick=()=>{ if(loadSlot(s.n)){hide("savesScreen");hide("titleScreen");initGL();resumeFromSave();} else toast("Save corrupted",1500); };
+    const bD=document.createElement("button");bD.className="btn ghost";bD.textContent="Delete";
+    bD.onclick=()=>{deleteSlot(s.n);renderSlots();updContinueBtn();};
+    row.append(bL,bD);list.appendChild(row);
+  }
+}
+function resumeFromSave(){
+  applySettings();
+  show("questScreen");
+  // rebuild quest panel for the loaded legend
+  $("questPanel").innerHTML=`<h3>The road through ${G.legend.regionName} — resumed</h3>
+    <ul class="spotlist">${G.spots.map((s,i)=>{
+      const here=i===G.spotIndex?" ◀ you are bound here":"";
+      return `<li style="${i<G.spotIndex?'opacity:.45':''}"><b>${i+1}. ${s.fantasyName}</b> — ${s.realName}<span>${s.decor}${i===G.spots.length-1?" · THE ECHO WAITS HERE":""}${here}</span></li>`;}).join("")}
+    </ul>`;
+  if(!G.demo)watchGPS();
+  fetchRoute();
+  renderInv();
+}
+function updContinueBtn(){
+  $("btnContinue").style.display=(Store.persistent&&listSlots().length)?"":"none";
+}
+
+/* ---------------- companion dialogue queue ---------------- */
+const Dlg = {
+  q:[], typing:false, cb:null,
+  say(lines, done){ this.q.push(...[].concat(lines)); this.cb=done||null; this.next(); },
+  next(){
+    if(this.typing) return;
+    const line=this.q.shift();
+    if(line===undefined){ $("dlg").style.display="none"; if(this.cb){const c=this.cb;this.cb=null;c();} return; }
+    $("dlg").style.display="block"; const el=$("dlgTxt"); el.textContent=""; this.typing=true;
+    let i=0; const tick=()=>{ if(i<line.length){ el.textContent+=line[i++]; this._t=setTimeout(tick,[28,14,6][ (Settings.textSpeed|0)-1 ]||14);} else this.typing=false; };
+    this._line=line; tick();
+  },
+  tap(){
+    if(this.typing){ clearTimeout(this._t); $("dlgTxt").textContent=this._line; this.typing=false; }
+    else this.next();
+  }
+};
+$("dlg").addEventListener("pointerdown",e=>{e.stopPropagation();Dlg.tap();});
+addEventListener("pointerdown",e=>{
+  if($("dlg").style.display!=="block")return;
+  if(e.target.closest("button,#inv,#dlg,.screen,input"))return;
+  Dlg.tap();
+},true);
+
+/* =====================================================================
+   1. GEOLOCATION + OSM POINTS OF INTEREST
+   ===================================================================== */
+function locate(){
+  return new Promise((res,rej)=>{
+    if(!navigator.geolocation) return rej("This browser has no geolocation API.");
+    if(!window.isSecureContext) return rej("Page is not HTTPS — Android Chrome blocks GPS on insecure pages.");
+    let done=false, watchId=null, lastErr=null;
+    const finish=p=>{ if(done)return; done=true;
+      if(watchId!=null)navigator.geolocation.clearWatch(watchId);
+      res({lat:p.coords.latitude,lon:p.coords.longitude}); };
+    const fail=e=>{ lastErr=e; };
+    // 1) fast path: any cached fix up to 1 min old
+    navigator.geolocation.getCurrentPosition(finish,fail,
+      {enableHighAccuracy:false,timeout:6000,maximumAge:60000});
+    // 2) reliable path on Android Chrome: watchPosition often succeeds where
+    //    a single high-accuracy getCurrentPosition times out
+    watchId=navigator.geolocation.watchPosition(finish,fail,
+      {enableHighAccuracy:true,timeout:20000,maximumAge:0});
+    setTimeout(()=>{ if(done)return; done=true;
+      if(watchId!=null)navigator.geolocation.clearWatch(watchId);
+      const code=lastErr&&lastErr.code;
+      rej(code===1?"GPS permission denied — allow Location for this site in Chrome (lock icon → Permissions)."
+         :code===2?"GPS position unavailable — turn on Location (high accuracy) and step outside if possible."
+         :"GPS timed out — weak signal. Try near a window or outdoors.");
+    },22000);
+  });
+}
+/* compass heading: Android absolute orientation + iOS permission flow */
+function initHeading(){
+  const onAbs=e=>{ if(e.alpha!=null){ G.heading=(e.absolute!==false)?(360-e.alpha)%360:G.heading; } };
+  const onIOS=e=>{ if(e.webkitCompassHeading!=null) G.heading=e.webkitCompassHeading; };
+  if(typeof DeviceOrientationEvent!=="undefined"&&typeof DeviceOrientationEvent.requestPermission==="function"){
+    DeviceOrientationEvent.requestPermission().then(st=>{
+      if(st==="granted")addEventListener("deviceorientation",onIOS,true);
+    }).catch(()=>{});
+  }else if("ondeviceorientationabsolute" in window){
+    addEventListener("deviceorientationabsolute",onAbs,true);
+  }else{
+    addEventListener("deviceorientation",onAbs,true);
+  }
+}
+async function fetchPOIs(lat,lon,radius=1500){
+  const q=`[out:json][timeout:25];
+    (
+      node(around:${radius},${lat},${lon})[historic];
+      node(around:${radius},${lat},${lon})[tourism~"attraction|monument|museum|viewpoint|artwork"];
+      node(around:${radius},${lat},${lon})[amenity~"place_of_worship|fountain|townhall|marketplace"];
+      node(around:${radius},${lat},${lon})[natural~"peak|spring|tree"];
+      way(around:${radius},${lat},${lon})[historic];
+      way(around:${radius},${lat},${lon})[leisure=park];
+    );
+    out center 40;`;
+  const r=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:"data="+encodeURIComponent(q),
+    headers:{"Content-Type":"application/x-www-form-urlencoded"}});
+  const j=await r.json();
+  return j.elements.map(e=>({
+    name:(e.tags&&(e.tags.name||e.tags["name:en"]))||labelFromTags(e.tags),
+    lat:e.lat??e.center?.lat, lon:e.lon??e.center?.lon, tags:e.tags||{}
+  })).filter(p=>p.lat&&p.lon&&p.name).slice(0,30);
+}
+function labelFromTags(t={}){
+  if(t.historic) return "Old "+t.historic.replace(/_/g," ");
+  if(t.amenity==="place_of_worship") return "Shrine";
+  if(t.amenity==="fountain") return "Fountain";
+  if(t.natural==="peak") return "Peak";
+  if(t.natural==="spring") return "Spring";
+  if(t.leisure==="park") return "Green Hollow";
+  if(t.tourism) return t.tourism.replace(/_/g," ");
+  return null;
+}
+function envType(pois,tags){
+  // crude environment classification → drives gear list + theming fallback
+  const txt=JSON.stringify(pois.map(p=>p.tags));
+  if(/peak|spring|mountain|forest|wood/.test(txt)) return "wilderness";
+  if(pois.length>=15) return "city";
+  if(pois.length>=5) return "town";
+  return "wilds";
+}
+
+/* =====================================================================
+   2. AI LEGEND WEAVER (Claude API) + offline fallback
+   ===================================================================== */
+async function weaveLegend(pois, env, place){
+  const poiList=pois.slice(0,12).map(p=>`- ${p.name} (${Object.entries(p.tags).slice(0,3).map(([k,v])=>k+"="+v).join(", ")})`).join("\n");
+  const prompt=`You are the lore engine of a dark-medieval-fantasy AR soulslike. The player physically stands near: ${place||"an unknown settlement"} (environment type: ${env}). Real nearby points of interest:
+${poiList||"- (none found — invent a ruined hamlet)"}
+
+Reinterpret the REAL identity/history of these places into ONE dark fantasy legend. Respond ONLY with JSON, no markdown fences, with this exact shape:
+{
+ "regionName": "fantasy name of the realm",
+ "intro": ["2-4 short Herald dialogue lines introducing the quest, ominous, second person"],
+ "gear": {"clothing":["3-4 real-world items appropriate for walking this ${env} environment"],"objects":["3-4 real items: water, phone charged, etc"],"transport":["1-2 realistic ways to move between these spots"]},
+ "boss": {"name":"...", "title":"...", "type":"one of: wraith|beast|knight|sorcerer|colossus", "lore":"2 sentences tying it to the real history of the final place", "phases":[{"name":"...","taunt":"..."},{"name":"...","taunt":"..."},{"name":"...","taunt":"..."}]},
+ "spots": [for 3 to 5 of the listed real POIs, ordered as a walking route, each: {"realName":"exact real name from the list","fantasyName":"...","clue":"1 Herald line pointing to the NEXT spot, poetic","decor":"one of: graveyard|ruins|shrine|grove|battlefield","enemy":"short enemy name themed to the boss"}],
+ "notes": [3 items: {"title":"...","text":"3-5 sentence in-world note, darker and deeper than the Herald's telling, grounded in the real place's story"}]
+}`;
+  const headers={"Content-Type":"application/json"};
+  if(Settings.apiKey){headers["x-api-key"]=Settings.apiKey;headers["anthropic-version"]="2023-06-01";
+    headers["anthropic-dangerous-direct-browser-access"]="true";}
+  const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",
+    headers,
+    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,
+      messages:[{role:"user",content:prompt}]})});
+  const data=await r.json();
+  const text=data.content.filter(b=>b.type==="text").map(b=>b.text).join("\n");
+  return JSON.parse(text.replace(/```json|```/g,"").trim());
+}
+function normalizeLegend(ai,fb){
+  if(!ai||typeof ai!=="object")return fb;
+  const L={...fb,...ai};
+  L.intro=[].concat(L.intro||fb.intro).filter(x=>typeof x==="string"&&x);
+  if(!L.intro.length)L.intro=fb.intro;
+  L.gear={...fb.gear,...(ai.gear||{})};
+  for(const k of["clothing","objects","transport"])
+    if(!Array.isArray(L.gear[k])||!L.gear[k].length)L.gear[k]=fb.gear[k];
+  L.boss={...fb.boss,...(ai.boss||{})};
+  if(!Array.isArray(L.boss.phases)||!L.boss.phases.length)L.boss.phases=fb.boss.phases;
+  L.boss.phases=L.boss.phases.map((p,i)=>({name:p&&p.name||fb.boss.phases[Math.min(i,2)].name,taunt:p&&p.taunt||"…"}));
+  if(!Array.isArray(L.spots)||!L.spots.length)L.spots=fb.spots;
+  L.spots=L.spots.map((sp,i)=>({realName:sp.realName||"Unknown place",
+    fantasyName:sp.fantasyName||"The Nameless "+(i+1),
+    clue:sp.clue||(i<L.spots.length-1?"Onward. The trail thins ahead.":"Here. It ends here."),
+    decor:DECOR[sp.decor]?sp.decor:"ruins",
+    enemy:sp.enemy||"Husk"}));
+  if(!Array.isArray(L.notes)||!L.notes.length)L.notes=fb.notes;
+  return L;
+}
+function fallbackLegend(pois, env){
+  const names=pois.length?pois:[{name:"Forgotten Crossroads"},{name:"Hollow Well"},{name:"Broken Chapel"},{name:"Gallows Hill"}];
+  const picks=names.slice(0,4);
+  const decors=["graveyard","ruins","shrine","grove","battlefield"];
+  return {
+    regionName:"The Ashen March",
+    intro:["I tore through nine centuries to find you. Listen.",
+      "Every stone around you remembers a name it was forced to forget.",
+      "Walk where I point. Break what stands in your way. At the end, an Echo waits — and it knows you are coming."],
+    gear:{
+      clothing: env==="wilderness"?["Hiking boots","Layered jacket","Hat","Rain shell"]:["Comfortable walking shoes","Weather-appropriate jacket","A cap for the sun"],
+      objects: ["Charged phone or Spectacles","Water bottle","Small snack","Portable battery"],
+      transport: env==="city"?["On foot","Public transit between distant spots"]:["On foot","A bicycle if the paths allow"]
+    },
+    boss:{name:"Vellmar",title:"the Unburied Toll",type:"wraith",
+      lore:"When the old bell of this place last rang, it rang for the dead alone. What answered never left.",
+      phases:[{name:"The Toll",taunt:"You hear it too, don't you?"},
+              {name:"The Procession",taunt:"Join the others. They walk behind you already."},
+              {name:"The Silence",taunt:"…"}]},
+    spots:picks.map((p,i)=>({realName:p.name,fantasyName:"The "+choice(["Weeping","Hollow","Ashen","Sunken","Pale"])+" "+choice(["Gate","Vigil","Stair","Choir","Marrow"]),
+      clue:i<picks.length-1?`The wind drags ash toward ${picks[i+1].name}. Follow it before it settles.`:"Here. It ends here.",
+      decor:decors[i%decors.length],enemy:choice(["Husk Penitent","Bell-Bound Shade","Rust Sentinel","Grave Whelp"])})),
+    notes:[
+      {title:"A debt of bells",text:"They say the bell-founder mixed bone-ash into the bronze so the dead could hear it. He was paid in silence. We buried him standing up, facing the tower, so he could watch what he had made. He watches still."},
+      {title:"The last warden's ledger",text:"Day 40. The pilgrims stopped coming when the road learned to move at night. I chart it each dawn and each dawn it lies differently. I no longer believe we built these paths. I believe they grew, and that they are hungry."},
+      {title:"Unsigned",text:"If you found this, the light found you first. Do not trust everything it says about the future. It came back for a reason it will not name. Ask it whose voice it borrowed."}
+    ]
+  };
+}
+
+/* =====================================================================
+   3. THREE.JS WORLD, ENEMIES, LOOT, BOSS, COMPANION
+   ===================================================================== */
+let renderer,scene,camera,clock,herald,heraldLight,reticle;
+const tmpV=new THREE.Vector3();
+function randDir(){ // r128-safe random unit vector
+  const u=Math.random()*2-1, t=Math.random()*Math.PI*2, r=Math.sqrt(1-u*u);
+  return new THREE.Vector3(r*Math.cos(t), r*Math.sin(t), u);
+}
+function initGL(){
+  renderer=new THREE.WebGLRenderer({canvas:$("c"),antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.xr.enabled=true;
+  scene=new THREE.Scene();
+  camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.02,80);
+  camera.position.set(0,1.6,0);
+  scene.add(new THREE.HemisphereLight(0x8877ff,0x110a06,.7));
+  const dl=new THREE.DirectionalLight(0xffe2b0,.5); dl.position.set(2,4,1); scene.add(dl);
+  clock=new THREE.Clock();
+  buildHerald();
+  const onResize=()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight);log("resize",innerWidth+"x"+innerHeight);};
+  addEventListener("resize",onResize);
+  document.addEventListener("fullscreenchange",()=>{log("fullscreenchange:",!!document.fullscreenElement);setTimeout(onResize,80);});
+  addEventListener("orientationchange",()=>setTimeout(onResize,200));
+  renderer.setAnimationLoop(loop);
+}
+/* --- the Herald: yellow thundery light from the future --- */
+function buildHerald(){
+  herald=new THREE.Group();
+  const core=new THREE.Mesh(new THREE.IcosahedronGeometry(.06,1),
+    new THREE.MeshBasicMaterial({color:0xffe9a8}));
+  const halo=new THREE.Mesh(new THREE.SphereGeometry(.13,16,16),
+    new THREE.MeshBasicMaterial({color:0xe8b33a,transparent:true,opacity:.25,blending:THREE.AdditiveBlending}));
+  heraldLight=new THREE.PointLight(0xe8b33a,2,4);
+  // crackling arcs
+  herald.arcs=[];
+  for(let i=0;i<4;i++){
+    const g=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);
+    const arc=new THREE.Line(g,new THREE.LineBasicMaterial({color:0xfff4c8,transparent:true,opacity:.8}));
+    herald.arcs.push(arc); herald.add(arc);
+  }
+  herald.add(core,halo,heraldLight); herald.core=core; herald.halo=halo;
+  herald.position.set(.5,1.5,-1.2);
+  scene.add(herald);
+}
+function updateHerald(dt,t){
+  // hover beside the camera
+  const target=tmpV.set(.55,-.1,-1.1).applyMatrix4(camera.matrixWorld);
+  herald.position.lerp(target,1-Math.pow(.001,dt));
+  const flick=.8+Math.sin(t*30)*.15+Math.random()*.25;
+  heraldLight.intensity=2*flick; herald.halo.scale.setScalar(.9+flick*.3);
+  herald.core.rotation.y+=dt*4; herald.core.rotation.x+=dt*2.3;
+  for(const arc of herald.arcs){
+    if(Math.random()<.3){
+      const a=randDir().multiplyScalar(.07);
+      const b=randDir().multiplyScalar(rand(.15,.35));
+      arc.geometry.setFromPoints([a,b]); arc.material.opacity=rand(.3,.95);
+    }
+  }
+}
+/* --- decor themes per spot --- */
+const DECOR={
+  graveyard:{fog:0x1a1626,props:s=>{for(let i=0;i<6;i++) s.add(prop(boxM(.35,rand(.5,.9),.08,0x3c3a46),rand(-3,3),0,rand(-4,-1.5),rand(-.15,.15)));}},
+  ruins:{fog:0x241d16,props:s=>{for(let i=0;i<5;i++) s.add(prop(cylM(rand(.15,.25),rand(.6,1.6),0x4a4238),rand(-3.5,3.5),0,rand(-4.5,-1.5)));}},
+  shrine:{fog:0x16202a,props:s=>{const a=prop(cylM(.3,.1,0x5a5040),0,0,-3);const f=new THREE.PointLight(0x6e5cc4,1.4,4);f.position.set(0,.6,-3);s.add(a,f);}},
+  grove:{fog:0x101a10,props:s=>{for(let i=0;i<6;i++){const tr=prop(cylM(.08,rand(1.2,2),0x2e2418),rand(-4,4),0,rand(-5,-1.5));s.add(tr);}}},
+  battlefield:{fog:0x1f1212,props:s=>{for(let i=0;i<7;i++){const sw=prop(boxM(.05,rand(.5,.8),.05,0x6a6a72),rand(-3,3),0,rand(-4,-1),rand(-.4,.4),rand(-.3,.3));s.add(sw);}}},
+};
+function boxM(w,h,d,c){return new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color:c,roughness:.95}));}
+function cylM(r,h,c){return new THREE.Mesh(new THREE.CylinderGeometry(r,r*1.15,h,7),new THREE.MeshStandardMaterial({color:c,roughness:.95}));}
+function prop(m,x,y,z,rx=0,rz=0){m.position.set(x,y+m.geometry.parameters.height/2||y,z);m.rotation.x=rx;m.rotation.z=rz;m.userData.decor=true;return m;}
+
+let decorGroup=null;
+function buildEncounter(spot,isBoss){
+  clearEncounter();
+  decorGroup=new THREE.Group(); scene.add(decorGroup);
+  const theme=DECOR[spot.decor]||DECOR.ruins;
+  scene.fog=new THREE.FogExp2(theme.fog,.12);
+  theme.props(decorGroup);
+  // loot containers: pots, chest, skeleton
+  const lootDefs=[
+    {kind:"pot",geo:new THREE.SphereGeometry(.16,8,6),c:0x8a5a32,y:.16},
+    {kind:"pot",geo:new THREE.SphereGeometry(.14,8,6),c:0x7a4a2a,y:.14},
+    {kind:"chest",geo:new THREE.BoxGeometry(.45,.3,.3),c:0x5a3a1a,y:.15},
+    {kind:"skeleton",geo:new THREE.BoxGeometry(.5,.12,.22),c:0xcfc2a6,y:.06},
+  ];
+  for(const d of lootDefs){
+    const m=new THREE.Mesh(d.geo,new THREE.MeshStandardMaterial({color:d.c,roughness:.9}));
+    m.position.set(rand(-2.5,2.5),d.y,rand(-3.5,-1.2));
+    m.userData={loot:true,kind:d.kind};
+    decorGroup.add(m); G.loots.push(m);
+  }
+  // enemies or boss
+  if(isBoss) spawnBoss(spot);
+  else{
+    const n=2+Math.floor(Math.random()*2);
+    for(let i=0;i<n;i++) spawnEnemy(spot,i,n);
+  }
+  G.encounterActive=true;
+  $("hint").textContent=isBoss?"":"Tap an enemy / Strike to attack · break pots & open chests";
+}
+function clearEncounter(){
+  if(decorGroup){scene.remove(decorGroup);decorGroup=null;}
+  G.enemies.length=0;G.loots.length=0;G.boss=null;scene.fog=null;
+  $("bossbar").style.display="none";$("hint").textContent="";
+  G.encounterActive=false;
+}
+function humanoid(color,scale=1){
+  const g=new THREE.Group();
+  const body=boxM(.34*scale,.5*scale,.2*scale,color);body.position.y=.85*scale;
+  const head=boxM(.2*scale,.2*scale,.2*scale,color);head.position.y=1.25*scale;
+  const eyeM=new THREE.MeshBasicMaterial({color:0xff3322});
+  const e1=new THREE.Mesh(new THREE.SphereGeometry(.025*scale),eyeM);e1.position.set(.05*scale,1.27*scale,.1*scale);
+  const e2=e1.clone();e2.position.x*=-1;
+  const l1=boxM(.1*scale,.5*scale,.1*scale,color);l1.position.set(.1*scale,.3*scale,0);
+  const l2=l1.clone();l2.position.x*=-1;
+  const a1=boxM(.08*scale,.45*scale,.08*scale,color);a1.position.set(.25*scale,.85*scale,0);
+  const a2=a1.clone();a2.position.x*=-1;
+  g.add(body,head,e1,e2,l1,l2,a1,a2);
+  g.parts={a1,a2,head};
+  return g;
+}
+function spawnEnemy(spot,i,n){
+  const e=humanoid(0x3a3142);
+  const ang=(-.5+i/(Math.max(1,n-1)))*1.2;
+  e.position.set(Math.sin(ang)*3,0,-Math.cos(ang)*3-.5);
+  e.userData={enemy:true,hp:30,hpMax:30,state:"approach",cd:rand(1,2.5),name:spot.enemy||"Husk",speed:rand(.35,.6),dmg:8};
+  scene.add(e);(decorGroup||scene).add(e);G.enemies.push(e);
+}
+/* --- boss with phases & combos --- */
+const BOSS_LOOK={wraith:0x4a3a6a,beast:0x5a3a22,knight:0x44484e,sorcerer:0x2a4a5a,colossus:0x4a4438};
+function spawnBoss(spot){
+  const b=G.legend.boss;
+  const m=humanoid(BOSS_LOOK[b.type]||0x44484e,1.9);
+  m.position.set(0,0,-5);
+  m.userData={boss:true,hp:240,hpMax:240,phase:0,state:"intro",cd:2,combo:[],comboT:0,speed:.5,name:b.name,dmg:14};
+  scene.add(m);(decorGroup||scene).add(m);G.boss=m;
+  $("bossbar").style.display="block";Audio.sfx("boss");
+  $("bossname").textContent=`${b.name}, ${b.title}`;
+  Dlg.say([b.lore, `${b.name} — ${b.phases[0].name}. ${b.phases[0].taunt}`]);
+}
+const COMBOS=[ // sequences of [telegraphSec, kind]
+  [[0.9,"slash"],[0.5,"slash"]],
+  [[1.2,"slam"]],
+  [[0.8,"slash"],[0.6,"slash"],[0.5,"slam"]],
+  [[1.4,"wave"]],
+];
+function bossThink(b,dt){
+  const u=b.userData,d=b.position.distanceTo(camera.position);
+  b.lookAt(camera.position.x,0,camera.position.z);
+  // phase transitions
+  const frac=u.hp/u.hpMax;
+  const ph=frac>.66?0:frac>.33?1:2;
+  if(ph!==u.phase){u.phase=ph;u.speed+=.25;u.dmg+=4;
+    const p=G.legend.boss.phases[Math.min(ph,G.legend.boss.phases.length-1)];
+    Dlg.say([`Phase ${ph+1} — ${p.name}. ${p.taunt}`]);
+    shockwave(b.position);}
+  if(u.combo.length){ // executing a combo
+    u.comboT-=dt;
+    flash(b,u.comboT<.25?0xff5533:0xffaa33);
+    if(u.comboT<=0){
+      const [,kind]=u.combo.shift();
+      if(d< (kind==="wave"?6:2.4)) hurtPlayer(u.dmg*(kind==="slam"?1.5:1),kind);
+      if(kind==="wave") shockwave(b.position);
+      if(u.combo.length) u.comboT=u.combo[0][0]/(1+u.phase*.3);
+      else u.cd=rand(1.2,2.4)-u.phase*.25;
+    }
+    return;
+  }
+  if(d>2.2){const dir=tmpV.subVectors(camera.position,b.position);dir.y=0;dir.normalize();
+    b.position.addScaledVector(dir,u.speed*dt);}
+  u.cd-=dt;
+  if(u.cd<=0&&d<7){
+    u.combo=COMBOS[Math.min(COMBOS.length-1,Math.floor(Math.random()*(2+u.phase)))].slice();
+    u.comboT=u.combo[0][0]/(1+u.phase*.3);
+  }
+}
+function enemyThink(e,dt){
+  const u=e.userData,d=e.position.distanceTo(camera.position);
+  e.lookAt(camera.position.x,0,camera.position.z);
+  if(u.state==="windup"){u.cd-=dt;flash(e,0xff7744);
+    if(u.cd<=0){if(d<1.9)hurtPlayer(u.dmg,"slash");u.state="approach";u.cd=rand(1.4,2.6);}return;}
+  if(d>1.5){const dir=tmpV.subVectors(camera.position,e.position);dir.y=0;dir.normalize();
+    e.position.addScaledVector(dir,u.speed*dt);}
+  u.cd-=dt;
+  if(u.cd<=0&&d<2.2){u.state="windup";u.cd=.7;}
+}
+function flash(g,c){g.traverse(o=>{if(o.material&&o.material.emissive)o.material.emissive.setHex(Math.random()<.5?c:0x000000);});}
+function unflash(g){g.traverse(o=>{if(o.material&&o.material.emissive)o.material.emissive.setHex(0);});}
+function shockwave(pos){
+  const ring=new THREE.Mesh(new THREE.RingGeometry(.1,.18,32),
+    new THREE.MeshBasicMaterial({color:0xe8b33a,side:THREE.DoubleSide,transparent:true,opacity:.9}));
+  ring.rotation.x=-Math.PI/2;ring.position.copy(pos).setY(.05);scene.add(ring);
+  ring.userData.fx={t:0,upd(dt){this.t+=dt;ring.scale.setScalar(1+this.t*8);ring.material.opacity=.9-this.t;if(this.t>1){scene.remove(ring);return true;}}};
+  FX.push(ring.userData.fx);
+}
+const FX=[];
+
+/* =====================================================================
+   4. COMBAT, DAMAGE, LOOT, ITEMS
+   ===================================================================== */
+const ITEM_POOL=[
+  {nm:"Rust-Eaten Longsword",slot:"weapon",dmg:12,ds:"It remembers better hands."},
+  {nm:"Pilgrim's Axe",slot:"weapon",dmg:16,ds:"Heavy. Honest. Slow to forgive."},
+  {nm:"Bell-Bronze Mace",slot:"weapon",dmg:14,ds:"Rings faintly on every strike."},
+  {nm:"Yew Shortbow",slot:"weapon",dmg:10,ds:"Strikes from afar (auto-aims at range)."},
+  {nm:"Hunting Spear",slot:"weapon",dmg:13,ds:"Reach beyond reason."},
+  {nm:"Health Draught",slot:"potionH",ds:"Restores 40 HP. Tastes of iron and thyme."},
+  {nm:"Azure Phial",slot:"potionM",ds:"Restores 30 MP. Hums against the teeth."},
+  {nm:"Scroll of Thunder Echo",slot:"scroll",cost:20,dmg:40,ds:"The Herald's own wrath, borrowed."},
+  {nm:"Scroll of Grave Frost",slot:"scroll",cost:15,dmg:28,ds:"Cold enough to slow regret."},
+];
+function giveItem(it){G.inv.push({...it,id:Math.random().toString(36).slice(2)});toast("Obtained: "+it.nm);Audio.sfx("loot");renderInv();autosave();}
+function lootRoll(kind){
+  if(kind==="chest") return choice(ITEM_POOL.filter(i=>i.slot==="weapon"||i.slot==="scroll"));
+  if(kind==="skeleton"){
+    const note=G.legend.notes&&G.legend.notes[G._noteIdx||0];
+    if(note){G._noteIdx=(G._noteIdx||0)+1;return {nm:"Note: "+note.title,slot:"note",ds:"A scrap of someone's last truth.",text:note.text};}
+    return choice(ITEM_POOL);
+  }
+  return choice(ITEM_POOL.filter(i=>i.slot==="potionH"||i.slot==="potionM"));
+}
+function playerAttack(){
+  const w=G.equipped.weapon, dmg=w?w.dmg:6, reach=w&&/bow|spear/i.test(w.nm)?8:2.6;
+  if(G.player.st<12){toast("Exhausted…",900);return;}
+  G.player.st-=12;updBars();
+  swingFX();
+  // hit whatever is in front
+  const fwd=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  let hit=false;
+  const tryHit=t=>{
+    const to=tmpV.subVectors(t.position,camera.position);const d=to.length();
+    if(d<reach&&to.normalize().dot(fwd)>.55){damage(t,dmg);hit=true;}
+  };
+  for(const e of [...G.enemies]) tryHit(e);
+  if(G.boss) tryHit(G.boss);
+  for(const l of [...G.loots]){
+    const to=tmpV.subVectors(l.position,camera.position);
+    if(to.length()<2.4&&to.normalize().dot(fwd)>.5) openLoot(l);
+  }
+  if(!hit&&navigator.vibrate)navigator.vibrate(10);
+}
+function specialAttack(){
+  const s=G.equipped.scroll;
+  if(!s){toast("No scroll equipped",1200);return;}
+  if(G.player.mp<s.cost){toast("Not enough MP",1000);return;}
+  G.player.mp-=s.cost;updBars();
+  shockwave(camera.position);
+  for(const e of [...G.enemies]) if(e.position.distanceTo(camera.position)<7) damage(e,s.dmg);
+  if(G.boss&&G.boss.position.distanceTo(camera.position)<7) damage(G.boss,s.dmg);
+}
+let invuln=0;
+function dodge(){
+  if(G.player.st<20)return toast("Exhausted…",800);
+  G.player.st-=20;invuln=.6;updBars();Audio.sfx("dodge");toast("⟿ dodge",500);
+}
+function damage(t,d){
+  const u=t.userData;u.hp-=d;
+  flash(t,0xffffff);setTimeout(()=>unflash(t),90);Audio.sfx("hit");
+  if(u.boss){$("bossfill").style.transform=`scaleX(${clamp(u.hp/u.hpMax,0,1)})`;}
+  if(u.hp<=0){
+    if(u.boss){bossDown();}
+    else{
+      (decorGroup||scene).remove(t);G.enemies=G.enemies.filter(x=>x!==t);
+      G.player.souls+=10;toast("Echo absorbed +10");
+      if(Math.random()<.5) giveItem(lootRoll("pot"));
+      if(!G.enemies.length&&G.encounterActive&&!G.boss) spotCleared();
+    }
+  }
+}
+function hurtPlayer(d,kind){
+  if(invuln>0)return;
+  G.player.hp-=d;updBars();
+  Audio.sfx("hurt");document.body.animate([{filter:"none"},{filter:"brightness(1.6) saturate(2) hue-rotate(-30deg)"},{filter:"none"}],{duration:240});
+  if(navigator.vibrate)navigator.vibrate(60);
+  if(G.player.hp<=0) playerDie();
+}
+function openLoot(l){
+  (decorGroup||scene).remove(l);G.loots=G.loots.filter(x=>x!==l);
+  giveItem(lootRoll(l.userData.kind));
+}
+function swingFX(){
+  const tr=new THREE.Mesh(new THREE.TorusGeometry(.5,.015,6,24,Math.PI*1.1),
+    new THREE.MeshBasicMaterial({color:0xfff4c8,transparent:true,opacity:.9}));
+  tr.position.set(0,-.15,-.8).applyMatrix4(camera.matrixWorld);
+  tr.quaternion.copy(camera.quaternion);tr.rotateZ(rand(-1,1));
+  scene.add(tr);
+  tr.userData.fx={t:0,upd(dt){this.t+=dt*4;tr.material.opacity=.9-this.t;tr.rotateZ(dt*10);if(this.t>1){scene.remove(tr);return true;}}};
+  FX.push(tr.userData.fx);
+}
+function updBars(){
+  const p=G.player;
+  p.hp=clamp(p.hp,0,p.hpMax);p.mp=clamp(p.mp,0,p.mpMax);p.st=clamp(p.st,0,p.stMax);
+  $("hpbar").firstElementChild.style.transform=`scaleX(${p.hp/p.hpMax})`;
+  $("mpbar").firstElementChild.style.transform=`scaleX(${p.mp/p.mpMax})`;
+  $("stbar").firstElementChild.style.transform=`scaleX(${p.st/p.stMax})`;
+}
+function usePotion(kind){
+  const i=G.inv.findIndex(x=>x.slot===kind);
+  if(i<0)return toast("None left",900);
+  G.inv.splice(i,1);
+  if(kind==="potionH")G.player.hp+=40;else G.player.mp+=30;
+  updBars();renderInv();Audio.sfx("ui");toast(kind==="potionH"?"+40 HP":"+30 MP",900);autosave();
+}
+
+/* =====================================================================
+   5. QUEST FLOW
+   ===================================================================== */
+function startTravel(){
+  log("startTravel → spot",G.spotIndex);G.phase="travel";clearEncounter();
+  const s=G.spots[G.spotIndex];
+  $("objective").textContent=`${G.spotIndex+1}/${G.spots.length} · seek ${s.fantasyName}`;
+  $("spotname").textContent=s.fantasyName;
+  $("hint").textContent=G.demo?"Phantom realm: press “I have arrived” to travel":"Walk toward the marker · press “I have arrived” when at the real place";
+}
+function arrive(){
+  if(G.encounterActive)return;
+  const s=G.spots[G.spotIndex];
+  if(!G.demo&&G.lat){
+    const d=haversine(G.lat,G.lon,s.lat,s.lon);
+    if(d>Settings.radius){toast(`Still ${Math.round(d)} m away`,1500);return;}
+  }
+  const isBoss=G.spotIndex===G.spots.length-1;
+  G.phase=isBoss?"boss":"encounter";
+  Dlg.say(isBoss?["This is the place. I can taste the wrongness of it.","Steel yourself."]:
+    [`${s.fantasyName}. In your world they call it ${s.realName}.`,"Something stands between you and the trail. Cut it down."],
+    ()=>buildEncounter(s,isBoss));
+}
+function spotCleared(){
+  const s=G.spots[G.spotIndex];
+  G.player.st=G.player.stMax;updBars();
+  Dlg.say([s.clue],()=>{
+    G.spotIndex++;autosave();
+    if(G.spotIndex<G.spots.length) startTravel();
+  });
+}
+function bossDown(){
+  shockwave(G.boss.position);
+  (decorGroup||scene).remove(G.boss);G.boss=null;$("bossbar").style.display="none";
+  G.phase="win";autosave();Audio.sfx("boss");
+  $("winPanel").innerHTML=`<h3>${G.legend.regionName} — freed</h3>
+    <p>${G.legend.boss.name} dissolves into ash and bell-smoke. The Herald flickers, satisfied — or relieved.</p>
+    <p style="margin-top:8px;color:#8d86a5">Echoes absorbed: ${G.player.souls+100}. Notes found: ${G.inv.filter(i=>i.slot==="note").length}/${G.legend.notes.length}.</p>`;
+  show("winScreen");$("hud").style.display="none";
+}
+function playerDie(){
+  clearEncounter();$("hud").style.display="none";show("deathScreen");
+}
+$("btnRespawn").onclick=()=>{
+  hide("deathScreen");
+  Object.assign(G.player,{hp:G.player.hpMax,mp:G.player.mpMax,st:G.player.stMax});
+  updBars();$("hud").style.display="block";startTravel();
+};
+
+/* =====================================================================
+   6. INVENTORY UI
+   ===================================================================== */
+function renderInv(){
+  $("slotline").textContent=`Weapon: ${G.equipped.weapon?G.equipped.weapon.nm:"fists"} · Scroll: ${G.equipped.scroll?G.equipped.scroll.nm:"—"} · Echoes: ${G.player.souls}`;
+  const grid=$("invgrid");grid.innerHTML="";
+  for(const it of G.inv){
+    const div=document.createElement("div");div.className="item";
+    if((G.equipped.weapon&&G.equipped.weapon.id===it.id)||(G.equipped.scroll&&G.equipped.scroll.id===it.id))div.classList.add("equipped");
+    div.innerHTML=`<div class="nm">${it.nm}</div><div class="ds">${it.ds||""}</div>`;
+    div.onclick=()=>{
+      if(it.slot==="weapon"){G.equipped.weapon=it;toast("Equipped "+it.nm,900);autosave();}
+      else if(it.slot==="scroll"){G.equipped.scroll=it;toast("Scroll readied",900);autosave();}
+      else if(it.slot==="note"){$("notePaper").innerHTML=`<h4>${it.nm.replace("Note: ","")}</h4><p>${it.text}</p>`;$("inv").style.display="none";show("noteScreen");}
+      else if(it.slot==="potionH")usePotion("potionH");
+      else if(it.slot==="potionM")usePotion("potionM");
+      renderInv();
+    };
+    grid.appendChild(div);
+  }
+  if(!G.inv.length)grid.innerHTML='<div class="ds" style="grid-column:1/-1;text-align:center;color:#6e6786">Empty. Break pots. Open chests. Search the dead.</div>';
+}
+$("btnInv").onclick=()=>{renderInv();$("inv").style.display="flex";};
+$("btnInvClose").onclick=()=>$("inv").style.display="none";
+$("btnNoteClose").onclick=()=>{hide("noteScreen");$("inv").style.display="flex";};
+
+/* =====================================================================
+   7. XR SESSION + HAND-TRACKING SWING DETECTION
+   ===================================================================== */
+let xrHands=[],lastHandPos=[new THREE.Vector3(),new THREE.Vector3()],swingCD=0;
+async function enterXR(){
+  if(!navigator.xr) return toast("WebXR unavailable — using flat mode"),enterFlat();
+  try{
+    log("requesting immersive-ar…");
+    const session=await navigator.xr.requestSession("immersive-ar",{
+      optionalFeatures:["local-floor","hand-tracking","dom-overlay"],
+      domOverlay:{root:document.body}});
+    log("session granted · domOverlay:",!!(session.domOverlayState&&session.domOverlayState.type),
+        "· blend:",session.environmentBlendMode);
+    // prefer floor space, fall back to local (many phones lack local-floor)
+    try{ await session.requestReferenceSpace("local-floor");
+         renderer.xr.setReferenceSpaceType("local-floor");log("refSpace: local-floor"); }
+    catch(_){ renderer.xr.setReferenceSpaceType("local");camera.position.set(0,0,0);log("refSpace: local"); }
+    await renderer.xr.setSession(session);
+    session.addEventListener("visibilitychange",()=>log("xr visibility:",session.visibilityState));
+    G.xr=true;
+    const v=$("camFeed");if(v.srcObject){v.srcObject.getTracks().forEach(t=>t.stop());v.srcObject=null;}v.style.display="none";
+    for(let i=0;i<2;i++){
+      const h=renderer.xr.getHand(i);scene.add(h);xrHands.push(h);
+    }
+    // controller select = attack
+    for(let i=0;i<2;i++){
+      const c=renderer.xr.getController(i);
+      c.addEventListener("select",playerAttack);scene.add(c);
+    }
+    session.addEventListener("end",()=>{log("xr session ended");G.xr=false;startCamFeed();});
+    beginGame();
+  }catch(e){log("AR session failed:",e.message||e);toast("AR session failed — camera mode");enterFlat();}
+}
+async function startCamFeed(){
+  const v=$("camFeed");
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    toast("Camera API unavailable in this browser",3500);return false;}
+  try{
+    let stream;
+    try{ stream=await navigator.mediaDevices.getUserMedia(
+      {video:{facingMode:{exact:"environment"}},audio:false}); }
+    catch(_){ stream=await navigator.mediaDevices.getUserMedia(
+      {video:{facingMode:"environment"},audio:false}); }
+    log("camera stream acquired:",stream.getVideoTracks()[0]&&stream.getVideoTracks()[0].label);
+    v.srcObject=stream;v.style.display="block";
+    v.onplaying=()=>log("camera <video> playing",v.videoWidth+"x"+v.videoHeight);
+    try{ await v.play(); }
+    catch(_){ // some Androids require a fresh gesture to start playback
+      const kick=()=>{v.play().catch(()=>{});removeEventListener("pointerdown",kick);};
+      addEventListener("pointerdown",kick);
+    }
+    toast("Camera live",1200);
+    return true;
+  }catch(e){
+    toast("Camera blocked: "+(e.name||e)+". Tap the lock icon → Permissions → Camera → Allow, then reload.",6000);
+    return false;
+  }
+}
+function enterFlat(){
+  log("enterFlat (camera mode)");
+  // go fullscreen for an immersive magic window; never fatal if refused
+  const el=document.documentElement;
+  if(el.requestFullscreen)el.requestFullscreen({navigationUI:"hide"}).then(
+    ()=>log("fullscreen on"),e=>log("fullscreen refused:",e.message||e));
+  if(screen.orientation&&screen.orientation.lock)
+    screen.orientation.lock("portrait").catch(()=>{});
+  // magic-window AR: real camera behind the 3D layer
+  startCamFeed();
+  let dragging=false,lx=0,ly=0,yaw=0,pitch=0;
+  $("c").addEventListener("pointerdown",e=>{dragging=true;lx=e.clientX;ly=e.clientY;});
+  addEventListener("pointermove",e=>{if(!dragging)return;
+    yaw-=(e.clientX-lx)*.005;pitch=clamp(pitch-(e.clientY-ly)*.005,-1.2,1.2);
+    lx=e.clientX;ly=e.clientY;camera.rotation.set(pitch,yaw,0,"YXZ");});
+  addEventListener("pointerup",()=>dragging=false);
+  initHeading();
+  beginGame();
+}
+function handSwing(dt){
+  if(!G.xr)return;swingCD-=dt;
+  xrHands.forEach((h,i)=>{
+    const j=h.joints&&h.joints["index-finger-tip"];
+    if(!j)return;
+    const p=j.position;const v=p.distanceTo(lastHandPos[i])/Math.max(dt,.001);
+    lastHandPos[i].copy(p);
+    if(v>Settings.swing&&swingCD<=0){swingCD=.45;playerAttack();}
+  });
+}
+
+/* =====================================================================
+   8. GPS WATCH + COMPASS HUD
+   ===================================================================== */
+function watchGPS(){
+  if(!navigator.geolocation)return;
+  navigator.geolocation.watchPosition(p=>{
+    G.lat=p.coords.latitude;G.lon=p.coords.longitude;
+    if(p.coords.heading!=null&&p.coords.speed>0.5)G.heading=p.coords.heading;
+  },e=>{if(e.code===1&&!G._gpsWarned){G._gpsWarned=true;toast("Location permission lost — re-enable it in Chrome site settings",4000);}},
+  {enableHighAccuracy:true,maximumAge:2000});
+}
+function updCompass(){
+  const s=G.spots[G.spotIndex];if(!s)return;
+  if(G.demo||G.lat==null){$("dist").textContent="∞";$("arrow").style.transform="rotate(0deg)";return;}
+  const d=haversine(G.lat,G.lon,s.lat,s.lon);
+  $("dist").textContent=d>999?(d/1000).toFixed(1)+" km":Math.round(d)+" m";
+  const b=bearing(G.lat,G.lon,s.lat,s.lon)-G.heading;
+  $("arrow").style.transform=`rotate(${b-90}deg)`;
+  if(d<Settings.radius*0.8&&!G.encounterActive&&G.phase==="travel"){toast("The air thickens. You are close — press “I have arrived”.",2500);}
+}
+
+/* =====================================================================
+   8b. ROUTE (OSRM walking path), MINIMAP RADAR, FULL MAP
+   ===================================================================== */
+G.route=[];           // [[lat,lon],...] full walking path through all spots
+G.routeLegs=[];       // index into route where each spot's leg starts
+async function fetchRoute(){
+  // walking route: player position -> spot1 -> ... -> last spot
+  const pts=[[G.lat??G.spots[0].lat,G.lon??G.spots[0].lon],...G.spots.map(s=>[s.lat,s.lon])];
+  try{
+    const coords=pts.map(p=>p[1]+","+p[0]).join(";");
+    const r=await fetch(`https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson&steps=false`);
+    const j=await r.json();
+    if(j.routes&&j.routes[0]){
+      G.route=j.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]);
+      G.routeMeta={dist:j.routes[0].distance,dur:j.routes[0].duration};
+      return;
+    }
+  }catch(e){}
+  G.route=pts; G.routeMeta=null;   // fallback: straight legs
+}
+/* local meters projection around a reference lat/lon */
+function toLocal(lat,lon,refLat,refLon){
+  const m=111320;
+  return [ (lon-refLon)*m*Math.cos(refLat*Math.PI/180), (lat-refLat)*m ]; // [east, north] meters
+}
+/* ---- minimap radar: rotates with heading, shows path + spots + you ---- */
+const mm=$("minimap").getContext("2d");
+let mmZoom=1; // meters-per-half-radius adapts to distance
+function drawMinimap(){
+  const W=256,R=W/2;
+  mm.clearRect(0,0,W,W);
+  if(G.lat==null&&!G.demo)return;
+  const refLat=G.lat??(G.spots[0]?G.spots[0].lat:0), refLon=G.lon??(G.spots[0]?G.spots[0].lon:0);
+  const s=G.spots[G.spotIndex];
+  const dNext=s?haversine(refLat,refLon,s.lat,s.lon):100;
+  // view range: at least 120 m, at most enough to show next spot at 80% radius
+  const range=clamp(dNext/0.8,120,4000); mmZoom=R/range;
+  const head=(G.heading||0)*Math.PI/180;
+  mm.save();
+  mm.beginPath();mm.arc(R,R,R-3,0,Math.PI*2);mm.clip();
+  // bg rings
+  mm.fillStyle="rgba(8,7,14,.0)";mm.fillRect(0,0,W,W);
+  mm.strokeStyle="rgba(110,92,196,.3)";mm.lineWidth=1;
+  for(const f of[.33,.66,1]){mm.beginPath();mm.arc(R,R,(R-3)*f,0,Math.PI*2);mm.stroke();}
+  mm.translate(R,R);mm.rotate(head); // rotate world opposite of heading → up = facing dir
+  const P=(lat,lon)=>{const[e,n]=toLocal(lat,lon,refLat,refLon);return[e*mmZoom,-n*mmZoom];};
+  // path
+  if(G.route.length>1){
+    mm.beginPath();
+    G.route.forEach((p,i)=>{const[x,y]=P(p[0],p[1]);i?mm.lineTo(x,y):mm.moveTo(x,y);});
+    mm.strokeStyle="rgba(232,179,58,.85)";mm.lineWidth=3;mm.setLineDash([7,5]);mm.stroke();mm.setLineDash([]);
+  }
+  // spots
+  G.spots.forEach((sp,i)=>{
+    const[x,y]=P(sp.lat,sp.lon);
+    mm.beginPath();mm.arc(x,y,i===G.spots.length-1?6:4.5,0,Math.PI*2);
+    mm.fillStyle=i<G.spotIndex?"#4a4458":i===G.spotIndex?"#ffe9a8":"#6e5cc4";
+    mm.fill();
+    if(i===G.spotIndex){mm.strokeStyle="#e8b33a";mm.lineWidth=2;mm.beginPath();mm.arc(x,y,9,0,Math.PI*2);mm.stroke();}
+  });
+  mm.restore();
+  // player marker (always center, pointing up)
+  mm.save();mm.translate(R,R);
+  mm.fillStyle="#fff4c8";mm.beginPath();mm.moveTo(0,-9);mm.lineTo(6,7);mm.lineTo(0,3);mm.lineTo(-6,7);mm.closePath();mm.fill();
+  mm.restore();
+  // north tick
+  mm.save();mm.translate(R,R);mm.rotate(head);
+  mm.fillStyle="#9c2f2f";mm.font="11px Georgia";mm.textAlign="center";mm.fillText("N",0,-R+14);
+  mm.restore();
+  // off-screen pointer to next spot
+  if(s){
+    const[e,n]=toLocal(s.lat,s.lon,refLat,refLon);
+    if(Math.hypot(e,n)*mmZoom>R-12){
+      let a=Math.atan2(e,n)+head; // screen angle
+      mm.save();mm.translate(R+Math.sin(a)*(R-10),R-Math.cos(a)*(R-10));mm.rotate(a);
+      mm.fillStyle="#e8b33a";mm.beginPath();mm.moveTo(0,-7);mm.lineTo(5,5);mm.lineTo(-5,5);mm.closePath();mm.fill();
+      mm.restore();
+    }
+    $("mmDist").textContent=(dNext>999?(dNext/1000).toFixed(1)+" km":Math.round(dNext)+" m")+" · "+s.fantasyName.split(" ").slice(0,3).join(" ");
+  }
+}
+/* ---- full map (Leaflet) ---- */
+let leaf=null,leafYou=null,leafRoute=null,leafMarks=[];
+function openMap(){
+  $("mapScreen").style.display="flex";
+  const refLat=G.lat??G.spots[0].lat, refLon=G.lon??G.spots[0].lon;
+  if(!leaf){
+    leaf=L.map("leafmap",{zoomControl:true,attributionControl:true});
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,
+      attribution:"© OpenStreetMap"}).addTo(leaf);
+    leafYou=L.circleMarker([refLat,refLon],{radius:8,color:"#ffe9a8",fillColor:"#e8b33a",fillOpacity:.9}).addTo(leaf)
+      .bindTooltip("You");
+  }
+  // rebuild route + markers each open (progress changes colors)
+  if(leafRoute){leaf.removeLayer(leafRoute);}
+  leafMarks.forEach(m=>leaf.removeLayer(m));leafMarks=[];
+  if(G.route.length>1)
+    leafRoute=L.polyline(G.route,{color:"#e8b33a",weight:4,opacity:.85,dashArray:"8 6"}).addTo(leaf);
+  G.spots.forEach((sp,i)=>{
+    const done=i<G.spotIndex,cur=i===G.spotIndex,last=i===G.spots.length-1;
+    const mk=L.circleMarker([sp.lat,sp.lon],{radius:last?11:8,
+      color:cur?"#ffe9a8":"#6e5cc4",fillColor:done?"#3a3450":cur?"#e8b33a":"#6e5cc4",fillOpacity:.9,weight:cur?3:1.5})
+      .addTo(leaf).bindTooltip(`${i+1}. ${sp.fantasyName} — ${sp.realName}${last?" ☠":""}${done?" ✓":""}`);
+    leafMarks.push(mk);
+  });
+  leafYou.setLatLng([refLat,refLon]);
+  const b=L.latLngBounds([[refLat,refLon],...G.spots.map(sp=>[sp.lat,sp.lon])]);
+  leaf.fitBounds(b.pad(.2));
+  setTimeout(()=>leaf.invalidateSize(),60);
+  const s=G.spots[G.spotIndex];
+  const d=s?haversine(refLat,refLon,s.lat,s.lon):0;
+  $("mapInfo").textContent=(G.routeMeta?`Full road: ${(G.routeMeta.dist/1000).toFixed(1)} km · ~${Math.round(G.routeMeta.dur/60)} min on foot · `:"")+
+    (s?`Next: ${s.fantasyName} (${d>999?(d/1000).toFixed(1)+" km":Math.round(d)+" m"})`:"");
+}
+$("btnMap").onclick=()=>{Audio.sfx("ui");openMap();};
+$("btnMapClose").onclick=()=>{$("mapScreen").style.display="none";};
+
+/* =====================================================================
+   9. MAIN LOOP
+   ===================================================================== */
+let compassT=0,loopErrOnce=false;
+function loop(){
+ try{
+  const dt=Math.min(clock.getDelta(),.1),t=clock.elapsedTime;
+  updateHerald(dt,t);
+  invuln=Math.max(0,invuln-dt);
+  { // stamina regen — quick, and quicker the fuller it is (24/s empty → 48/s full)
+    const f=G.player.st/G.player.stMax;
+    G.player.st=clamp(G.player.st+dt*(24+24*f),0,G.player.stMax);
+  }
+  if((compassT+=dt)>0.5){compassT=0;updCompass();updBars();
+    if($("mapScreen").style.display==="flex"&&leafYou&&G.lat!=null)leafYou.setLatLng([G.lat,G.lon]);}
+  if(G.phase!=="title")drawMinimap();
+  if(G.encounterActive){
+    for(const e of G.enemies) enemyThink(e,dt);
+    if(G.boss) bossThink(G.boss,dt);
+  }
+  for(let i=FX.length-1;i>=0;i--) if(FX[i].upd(dt)) FX.splice(i,1);
+  handSwing(dt);
+  renderer.render(scene,camera);
+ }catch(err){
+   if(!loopErrOnce){loopErrOnce=true;toast("⚠ "+(err.message||err),6000);console.error(err);}
+   renderer.render(scene,camera); // keep compositing so passthrough stays visible
+ }
+}
+
+/* =====================================================================
+   10. BOOT SEQUENCE
+   ===================================================================== */
+async function boot(demo){
+  log("boot, demo =",demo);G.demo=demo;newSlot();hide("titleScreen");show("loadScreen");
+  let pois=[],env="town";
+  if(!demo){
+    try{
+      $("loadingTxt").textContent="Locating your realm… (allow Location when asked)";
+      initHeading();
+      const pos=await locate();log("GPS fix:",pos.lat.toFixed(5),pos.lon.toFixed(5));G.lat=pos.lat;G.lon=pos.lon;watchGPS();
+      $("loadingTxt").textContent="Unearthing places of power…";
+      pois=await fetchPOIs(pos.lat,pos.lon,Settings.poi);env=envType(pois);log("POIs:",pois.length,"env:",env);
+    }catch(e){
+      toast((typeof e==="string"?e:(e&&e.message)||"GPS/POI failed")+" — phantom realm instead",5000);
+      G.demo=true;
+    }
+  }
+  $("loadingTxt").textContent="The Herald weaves your legend…";
+  const fb=fallbackLegend(pois,env);
+  try{
+    const ai=await weaveLegend(pois,env,null);
+    G.legend=normalizeLegend(ai,fb);log("legend: AI ok →",G.legend.regionName);
+  }catch(e){ G.legend=fb;log("legend: fallback (",e.message||e,")"); }
+  // bind legend spots to real coordinates (or phantom offsets in demo)
+  G.spots=G.legend.spots.map((s,i)=>{
+    const real=pois.find(p=>p.name===s.realName);
+    return {...s,
+      lat:real?real.lat:(G.lat??0)+(i+1)*.0008,
+      lon:real?real.lon:(G.lon??0)+(i%2?1:-1)*(i+1)*.0006};
+  });
+  fetchRoute(); // walking path through all spots (async, fallback = straight legs)
+  // starter kit
+  giveItem(ITEM_POOL[0]);G.equipped.weapon=G.inv[0];
+  giveItem(ITEM_POOL[5]);giveItem(ITEM_POOL[6]);autosave();
+  // tutorial gear screen — AI-determined for this environment
+  hide("loadScreen");
+  const g=G.legend.gear;
+  $("gearPanel").innerHTML=`<h3>Before you walk — ${G.legend.regionName}</h3>
+    <p>The Herald has judged the land between your waypoints (${env}). Gather these in the real world first:</p>
+    <div class="gearcat">Clothing</div><ul>${g.clothing.map(x=>`<li>${x}</li>`).join("")}</ul>
+    <div class="gearcat">Carry</div><ul>${g.objects.map(x=>`<li>${x}</li>`).join("")}</ul>
+    <div class="gearcat">Travel between spots</div><ul>${g.transport.map(x=>`<li>${x}</li>`).join("")}</ul>
+    <p style="margin-top:12px;font-size:12px;color:#8d86a5">Stay aware of traffic and people around you. The realm is layered over the real world — the real world always wins.</p>`;
+  show("gearScreen");
+}
+$("btnGearDone").onclick=()=>{
+  hide("gearScreen");
+  // quest map
+  $("questPanel").innerHTML=`<h3>The road through ${G.legend.regionName}</h3>
+    <ul class="spotlist">${G.spots.map((s,i)=>{
+      const dist=(G.lat!=null&&!G.demo)?Math.round(haversine(G.lat,G.lon,s.lat,s.lon))+" m away":"phantom";
+      return `<li><b>${i+1}. ${s.fantasyName}</b> — ${s.realName}<span>${s.decor} · ${dist}${i===G.spots.length-1?" · THE ECHO WAITS HERE":""}</span></li>`;}).join("")}
+    </ul>`;
+  show("questScreen");
+};
+$("btnEnterAR").onclick=()=>{hide("questScreen");enterXR();};
+$("btnEnterFlat").onclick=()=>{hide("questScreen");enterFlat();};
+(async()=>{ // detect real immersive-ar support; otherwise default to camera mode
+  let ok=false;
+  try{ ok=navigator.xr&&await navigator.xr.isSessionSupported("immersive-ar"); }catch(e){}
+  if(!ok){ $("btnEnterAR").style.display="none";
+    $("btnEnterFlat").textContent="Enter the Realm (camera)"; }
+})();
+function beginGame(){
+  log("beginGame · xr:",G.xr,"· intro lines:",G.legend.intro.length);applySettings();Audio.startMusic();
+  $("hud").style.display="block";updBars();
+  Dlg.say(G.legend.intro,()=>startTravel());
+}
+$("btnBegin").onclick=()=>{initGL();boot(false);};
+$("btnDemo").onclick=()=>{initGL();boot(true);};
+$("btnContinue").onclick=()=>{renderSlots();show("savesScreen");};
+$("btnSavesClose").onclick=()=>hide("savesScreen");
+/* ---- settings UI ---- */
+const SBIND=[["setBright","bright","vBright",v=>v+"%"],["setMusic","music","vMusic",v=>v+"%"],
+  ["setSfx","sfx","vSfx",v=>v+"%"],["setText","textSpeed","vText",v=>["slow","normal","fast"][v-1]],
+  ["setRadius","radius","vRadius",v=>v+" m"],["setSwing","swing","vSwing",v=>v+" m/s"],["setPoi","poi","vPoi",v=>v+" m"]];
+function openSettings(){
+  $("setApiKey").value=Settings.apiKey;
+  for(const [id,key,lab,fmt] of SBIND){const el=$(id);el.value=Settings[key];$(lab).textContent=fmt(el.value);
+    el.oninput=()=>{$(lab).textContent=fmt(el.value);
+      if(key==="bright"){Settings.bright=+el.value;applySettings();}
+      if(key==="music"){Settings.music=+el.value;Audio.setMusic(Settings.music/100);}};}
+  show("settingsScreen");
+}
+$("btnSettings").onclick=openSettings;
+$("btnSettingsClose").onclick=()=>{Object.assign(Settings,Store.get("eotr_settings",DEFAULTS));applySettings();hide("settingsScreen");};
+$("btnSettingsSave").onclick=()=>{
+  Settings.apiKey=$("setApiKey").value.trim();
+  for(const [id,key] of SBIND)Settings[key]=+$(id).value;
+  saveSettings();Audio.sfx("ui");toast("Settings saved");hide("settingsScreen");
+};
+updContinueBtn();applySettings();
+
+/* combat buttons */
+$("btnAtk").onclick=playerAttack;
+$("btnSpecial").onclick=specialAttack;
+$("btnDodge").onclick=dodge;
+$("btnPotH").onclick=()=>usePotion("potionH");
+$("btnPotM").onclick=()=>usePotion("potionM");
+$("btnArrive").onclick=arrive;
+$("btnNewQuest").onclick=()=>location.reload();
+/* tap on canvas = attack/interact in flat mode */
+$("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();});
+</script>
+</body>
+</html>
