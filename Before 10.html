@@ -399,11 +399,8 @@ const Store=(()=>{
   };
 })();
 
-const PAGE_MODELS=location.href.replace(/[?#].*$/,"").replace(/[^/]*$/,"")+"models/";
-const DEFAULTS={apiKey:"",modelBase:PAGE_MODELS,bright:100,music:60,sfx:80,textSpeed:2,radius:60,swing:2.2,poi:1500};
+const DEFAULTS={apiKey:"",modelBase:"models/",bright:100,music:60,sfx:80,textSpeed:2,radius:60,swing:2.2,poi:1500};
 const Settings=Object.assign({},DEFAULTS,Store.get("eotr_settings",{}));
-if(!Settings.modelBase||Settings.modelBase==="models/"||Settings.modelBase==="./models/")
-  Settings.modelBase=PAGE_MODELS;
 function saveSettings(){Store.set("eotr_settings",Settings);applySettings();}
 function applySettings(){
   // brightness: dim via black overlay below 100%, boost exposure above 100%
