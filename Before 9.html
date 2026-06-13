@@ -201,9 +201,7 @@
     <div class="setrow"><label>3D model folder (GLB)</label>
       <input type="text" id="setModelBase" placeholder="models/" autocomplete="off">
       <div class="sethint">Folder (relative or full URL) containing optional realistic models named
-      &lt;enemy&gt;.glb — e.g. wolf.glb, skeleton.glb, boss_knight.glb. Missing files silently fall back to the built-in procedural models.</div>
-      <button class="btn ghost" id="btnTestModels" style="margin:8px 6px 0 0;padding:9px 18px;font-size:11px">Test model files</button>
-      <button class="btn ghost" id="btnAutoBase" style="margin:8px 0 0;padding:9px 18px;font-size:11px">Use this page's folder</button></div>
+      &lt;enemy&gt;.glb — e.g. wolf.glb, skeleton.glb, boss_knight.glb. Missing files silently fall back to the built-in procedural models.</div></div>
     <div class="setrow"><label>Display brightness <span id="vBright"></span></label>
       <input type="range" id="setBright" min="35" max="160" step="5"></div>
     <div class="setrow"><label>Music volume <span id="vMusic"></span></label>
@@ -504,10 +502,7 @@ function renderSlots(){
     row.innerHTML=`<div class="meta"><b>${s.region||"Unknown realm"}</b>
       <span>Spot ${s.progress||"?"} · ${s.souls||0} echoes · ${new Date(s.when).toLocaleString()}</span></div>`;
     const bL=document.createElement("button");bL.className="btn";bL.textContent="Load";
-    bL.onclick=async()=>{ if(loadSlot(s.n)){hide("savesScreen");hide("titleScreen");initGL();
-        show("loadScreen");$("loadingTxt").textContent="Summoning the bestiary…";
-        await preloadModels((d,n)=>{$("loadingTxt").textContent=`Summoning the bestiary… ${d}/${n}`;});
-        hide("loadScreen");resumeFromSave();} else toast("Save corrupted",1500); };
+    bL.onclick=()=>{ if(loadSlot(s.n)){hide("savesScreen");hide("titleScreen");initGL();resumeFromSave();} else toast("Save corrupted",1500); };
     const bD=document.createElement("button");bD.className="btn ghost";bD.textContent="Delete";
     bD.onclick=()=>{deleteSlot(s.n);renderSlots();updContinueBtn();};
     row.append(bL,bD);list.appendChild(row);
@@ -1171,107 +1166,36 @@ function ensureGLTFLoader(){
   if(_gltfReady)return _gltfReady;
   _gltfReady=new Promise(res=>{
     if(THREE.GLTFLoader)return res(true);
-    const load1=(urls)=>new Promise(ok=>{let i=0;
-      const nx=()=>{if(i>=urls.length)return ok(false);
-        const sc=document.createElement("script");sc.src=urls[i++];
-        sc.onload=()=>{log("loaded",sc.src.split("/").pop(),"from",sc.src.split("/")[2]);ok(true);};
-        sc.onerror=nx;document.head.appendChild(sc);};nx();});
-    (async()=>{
-      const okG=await load1([
-        "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js",
-        "https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"]);
-      if(!okG){log("GLTFLoader unavailable — procedural models only");return res(false);}
-      // Draco decoder so compressed .glb (gltf-transform --compress draco) works
-      await load1([
-        "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js",
-        "https://unpkg.com/three@0.128.0/examples/js/loaders/DRACOLoader.js"]);
-      res(true);
-    })();
+    const urls=[
+      "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js",
+      "https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/GLTFLoader.js"];
+    let i=0;
+    const tryNext=()=>{
+      if(i>=urls.length){log("GLTFLoader unavailable — procedural models only");return res(false);}
+      const sc=document.createElement("script");sc.src=urls[i++];
+      sc.onload=()=>{log("GLTFLoader loaded from",sc.src.split("/")[2]);res(true);};
+      sc.onerror=tryNext;document.head.appendChild(sc);
+    };
+    tryNext();
   });
   return _gltfReady;
-}
-function modelURL(kind){
-  let base=(Settings.modelBase||"models/").trim();
-  if(base&&!base.endsWith("/"))base+="/";
-  // resolve relative to the page so it works on GitHub Pages subpaths
-  return new URL(base+kind+".glb",location.href).href;
 }
 const ModelCache={cache:{},missing:{},
   async get(kind){
     if(this.cache[kind])return this.cache[kind];
     if(this.missing[kind])return null;
     if(!(await ensureGLTFLoader())||!THREE.GLTFLoader){this.missing[kind]=1;return null;}
-    const url=modelURL(kind);
-    try{
-      const r=await fetch(url);
-      if(!r.ok){log("model",kind,"→ HTTP",r.status,url);this.missing[kind]=1;return null;}
-      const buf=await r.arrayBuffer();
-      // Git LFS pointer detection: tiny text file instead of binary
-      const head=new TextDecoder().decode(buf.slice(0,40));
-      if(head.startsWith("version https://git-lfs")){
-        log("model",kind,"→ Git LFS POINTER, not the real file! Commit GLBs without LFS or use raw media URLs.");
-        toast("⚠ "+kind+".glb is a Git LFS pointer — see 🐞 log",4000);
-        this.missing[kind]=1;return null;
-      }
-      const magic=new TextDecoder().decode(buf.slice(0,4));
-      if(magic!=="glTF"){
-        log("model",kind,"→ not a binary .glb (starts with '"+head.slice(0,12)+"'). Export as glTF Binary (.glb).");
-        this.missing[kind]=1;return null;
-      }
-      return await new Promise(res=>{
-        const loader=new THREE.GLTFLoader();
-        if(THREE.DRACOLoader){
-          const dr=new THREE.DRACOLoader();
-          dr.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.4.1/");
-          loader.setDRACOLoader(dr);
-        }
-        loader.parse(buf,url.slice(0,url.lastIndexOf("/")+1),
-          g=>{log("model loaded:",kind,"· clips:",g.animations.length,"·",(buf.byteLength/1024).toFixed(0),"KB");
-              this.cache[kind]={scene:g.scene,clips:g.animations};res(this.cache[kind]);},
-          err=>{log("model",kind,"→ parse error:",err&&err.message||err);this.missing[kind]=1;res(null);});
-      });
-    }catch(e){
-      log("model",kind,"→ fetch failed:",e.message||e,url);
-      this.missing[kind]=1;return null;
-    }
+    const url=(Settings.modelBase||"models/").replace(/\/?$/,"/")+kind+".glb";
+    return new Promise(res=>{
+      new THREE.GLTFLoader().load(url,
+        g=>{log("model loaded:",kind,"clips:",g.animations.length);
+            this.cache[kind]={scene:g.scene,clips:g.animations};res(this.cache[kind]);},
+        undefined,
+        ()=>{this.missing[kind]=1;res(null);});
+    });
   }
 };
-/* preload every model this quest could spawn, before play begins */
-async function preloadModels(onProgress){
-  if(!(await ensureGLTFLoader())||!THREE.GLTFLoader){log("preload skipped — no GLTFLoader");return;}
-  const pool=new Set(BIOME_ENEMIES[G.env]||BIOME_ENEMIES.town);
-  // include any decor-biased fillers for this quest's spots, plus the boss
-  for(const sp of (G.spots||[])) (DECOR_BIAS[sp.decor]||[]).forEach(k=>pool.add(k));
-  if(G.legend&&G.legend.boss)pool.add("boss_"+G.legend.boss.type);
-  const list=[...pool];
-  log("preloading",list.length,"models:",list.join(","));
-  let done=0;
-  await Promise.all(list.map(async k=>{
-    try{ await ModelCache.get(k); }catch(e){}
-    done++; if(onProgress)onProgress(done,list.length,k);
-  }));
-  const got=list.filter(k=>ModelCache.cache[k]).length;
-  log("preload complete:",got+"/"+list.length,"models cached");
-}
-/* probe every expected filename and report */
-async function testModels(){
-  const base=modelURL("").replace(/\.glb$/,"");
-  log("— page URL:",location.href);
-  log("— resolved model base:",base);
-  // suggested absolute base from the page's own directory
-  const dir=location.href.replace(/[^/]*$/,"");
-  const sugg=dir+(Settings.modelBase||"models/").replace(/^\.?\//,"").replace(/\/?$/,"/");
-  if(base!==sugg)log("— if 404s below, try this exact value in the folder field:",sugg);
-  const all=[...Object.keys(BUILDERS),...Object.keys(BOSS_BUILDERS).map(k=>"boss_"+k)];
-  let found=0;
-  for(const k of all){
-    ModelCache.missing={};         // re-probe even previously failed ones
-    const ok=await ModelCache.get(k);
-    if(ok)found++;else if(!LOGBUF[LOGBUF.length-1].includes(k))log("model",k,"→ missing");
-  }
-  log("— model test done:",found+"/"+all.length,"found");
-  toast(found+"/"+all.length+" models found — details in 🐞",3500);
-}
 const MIXERS=[];
 function fitAndPose(src,clips,targetH){
   const root=src.clone(true);
@@ -1297,21 +1221,19 @@ function modelHeight(g){ // measured from the procedural stand-in
   const b=new THREE.Box3().setFromObject(g);
   return Math.max(.4,b.getSize(new THREE.Vector3()).y);
 }
-function applyModel(holder,data){
-  const targetH=modelHeight(holder);
-  const {root,mixer}=fitAndPose(data.scene,data.clips,targetH);
-  while(holder.children.length)holder.remove(holder.children[0]);
-  holder.add(root);
-  if(holder.userData){holder.userData.mixer=mixer;
-    const a=holder.userData.anim;if(a&&!["hover","bob","heavy"].includes(a.kind))holder.userData.anim=null;}
-  if(holder.anim&&!["hover","bob","heavy"].includes(holder.anim.kind))holder.anim=null;
-}
 async function tryUpgradeModel(holder,kind){
-  if(ModelCache.cache[kind]){applyModel(holder,ModelCache.cache[kind]);return;} // instant, pre-cached
   const targetH=modelHeight(holder);
   const data=await ModelCache.get(kind);
   if(!data||!holder.parent)return;                   // missing file, or enemy already dead
-  applyModel(holder,data);
+  const {root,mixer}=fitAndPose(data.scene,data.clips,targetH);
+  while(holder.children.length)holder.remove(holder.children[0]); // drop procedural parts
+  holder.add(root);
+  if(holder.userData){
+    holder.userData.mixer=mixer;
+    const a=holder.userData.anim;                    // keep positional anims, drop part anims
+    if(a&&!["hover","bob","heavy"].includes(a.kind))holder.userData.anim=null;
+  }
+  if(holder.anim&&!["hover","bob","heavy"].includes(holder.anim.kind))holder.anim=null;
 }
 /* ---- stat blocks + biome pools ---- */
 const ENEMY_STATS={
@@ -2143,11 +2065,6 @@ async function boot(demo){
       lon:real?real.lon:(G.lon??0)+(i%2?1:-1)*(i+1)*.0006};
   });
   fetchRoute(); // walking path through all spots (async, fallback = straight legs)
-  // preload 3D models so they appear instantly instead of swapping mid-fight
-  $("loadingTxt").textContent="Summoning the bestiary…";
-  show("loadScreen");
-  await preloadModels((d,n,k)=>{$("loadingTxt").textContent=`Summoning the bestiary… ${d}/${n}`;});
-  hide("loadScreen");
   // starter kit
   giveItem(ITEM_POOL[0]);G.equipped.weapon=G.inv[0];
   giveItem(ITEM_POOL[5]);giveItem(ITEM_POOL[6]);autosave();
@@ -2203,20 +2120,10 @@ function openSettings(){
   show("settingsScreen");
 }
 $("btnSettings").onclick=openSettings;
-$("btnTestModels").onclick=()=>{const nb=$("setModelBase").value.trim()||"models/";
-  if(nb!==Settings.modelBase){ModelCache.cache={};ModelCache.missing={};}
-  Settings.modelBase=nb;$("dbg").style.display="block";testModels();};
-$("btnAutoBase").onclick=()=>{
-  const abs=location.href.replace(/[^/]*$/,"")+"models/";
-  $("setModelBase").value=abs;Settings.modelBase=abs;
-  ModelCache.cache={};ModelCache.missing={};
-  toast("Set to "+abs,3000);};
 $("btnSettingsClose").onclick=()=>{Object.assign(Settings,Store.get("eotr_settings",DEFAULTS));applySettings();hide("settingsScreen");};
 $("btnSettingsSave").onclick=()=>{
   Settings.apiKey=$("setApiKey").value.trim();
-  const nb=$("setModelBase").value.trim()||"models/";
-  if(nb!==Settings.modelBase){ModelCache.cache={};ModelCache.missing={};}
-  Settings.modelBase=nb;
+  Settings.modelBase=$("setModelBase").value.trim()||"models/";
   for(const [id,key] of SBIND)Settings[key]=+$(id).value;
   saveSettings();Audio.sfx("ui");toast("Settings saved");hide("settingsScreen");
 };
