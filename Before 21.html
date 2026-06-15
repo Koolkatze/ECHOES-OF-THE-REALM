@@ -138,141 +138,100 @@
 </style>
 </head>
 <body>
-<audio id="bgm" loop preload="auto"></audio>
 <video id="camFeed" autoplay muted playsinline
   style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover;display:none;z-index:0"></video>
 <canvas id="c" style="z-index:1"></canvas>
 
 <!-- ============ TITLE ============ -->
 <div id="titleScreen" class="screen">
-  <div class="subtitle" data-i18n="subtitle_tag">a legend written upon the land itself</div>
-  <h1 class="title"><span data-i18n="title_l1">Echoes of</span><br><span data-i18n="title_l2">the Realm</span></h1>
+  <div class="subtitle">a legend written upon the land itself</div>
+  <h1 class="title">Echoes of<br>the Realm</h1>
   <div class="rune-divider"></div>
-  <button class="btn" id="btnBegin" data-i18n="begin">Begin the Pilgrimage</button>
-  <button class="btn" id="btnContinue" style="display:none" data-i18n="continue">Continue a Pilgrimage</button>
-  <button class="btn ghost" id="btnDemo" data-i18n="demo">Wander a Phantom Realm (no GPS)</button>
-  <button class="btn ghost" id="btnSettings" data-i18n="settings">⚙ Settings</button>
-  <div class="small" data-i18n="intro_blurb">The Herald — a thunder-light torn from the future — will weave a dark legend from the true history of wherever you stand. Walk to real places. Slay what waits there. Face the Echo at the end.</div>
+  <button class="btn" id="btnBegin">Begin the Pilgrimage</button>
+  <button class="btn" id="btnContinue" style="display:none">Continue a Pilgrimage</button>
+  <button class="btn ghost" id="btnDemo">Wander a Phantom Realm (no GPS)</button>
+  <button class="btn ghost" id="btnSettings">⚙ Settings</button>
+  <div class="small">The Herald — a thunder-light torn from the future — will weave a dark legend from the true
+  history of wherever you stand. Walk to real places. Slay what waits there. Face the Echo at the end.</div>
 </div>
 
 <!-- ============ LOADING / WEAVING ============ -->
 <div id="loadScreen" class="screen hidden">
   <div style="font-size:46px" class="spark">⚡</div>
-  <div class="subtitle" style="margin-top:14px" data-i18n="loading_sub">the herald is reading your world</div>
+  <div class="subtitle" style="margin-top:14px">the herald is reading your world</div>
   <div id="loadingTxt">Locating your realm…</div>
 </div>
 
 <!-- ============ TUTORIAL / GEAR ============ -->
 <div id="gearScreen" class="screen hidden">
   <div class="panel" id="gearPanel"></div>
-  <button class="btn" id="btnGearDone" style="margin-top:16px" data-i18n="prepared">I am prepared</button>
+  <button class="btn" id="btnGearDone" style="margin-top:16px">I am prepared</button>
 </div>
 
 <!-- ============ QUEST MAP ============ -->
 <div id="questScreen" class="screen hidden">
   <div class="panel" id="questPanel"></div>
-  <button class="btn" id="btnEnterAR" style="margin-top:16px" data-i18n="enter_ar">Enter the Realm (AR)</button>
-  <button class="btn ghost" id="btnEnterFlat" data-i18n="enter_flat">Enter without headset</button>
+  <button class="btn" id="btnEnterAR" style="margin-top:16px">Enter the Realm (AR)</button>
+  <button class="btn ghost" id="btnEnterFlat">Enter without headset</button>
 </div>
 
 <!-- ============ DEATH ============ -->
 <div id="deathScreen" class="screen hidden">
-  <h1 class="title" data-i18n="you_faded">You Faded</h1>
+  <h1 class="title">You Faded</h1>
   <div class="rune-divider"></div>
   <div class="small">The Herald drags your echo back through time…</div>
-  <button class="btn" id="btnRespawn" data-i18n="rise">Rise again</button>
+  <button class="btn" id="btnRespawn">Rise again</button>
 </div>
 
 <!-- ============ VICTORY ============ -->
 <div id="winScreen" class="screen hidden">
-  <h1 class="title" style="color:var(--thunder-hi)" data-i18n="echo_silenced">Echo Silenced</h1>
+  <h1 class="title" style="color:var(--thunder-hi)">Echo Silenced</h1>
   <div class="rune-divider"></div>
   <div class="panel" id="winPanel"></div>
-  <button class="btn" id="btnNewQuest" style="margin-top:14px" data-i18n="new_quest">Seek a new legend</button>
+  <button class="btn" id="btnNewQuest" style="margin-top:14px">Seek a new legend</button>
 </div>
 
 <!-- ============ SETTINGS ============ -->
 <div id="settingsScreen" class="screen hidden" style="z-index:70">
   <div class="panel" style="max-width:560px">
-    <h3 data-i18n="settings_title">Settings</h3>
-    <div class="setrow"><label data-i18n="lang_label">Language / Idioma</label>
-      <select id="setLang" style="width:100%;background:#0a0912;border:1px solid #3a3450;color:var(--parchment);font-family:inherit;font-size:14px;padding:10px">
-        <option value="en">English</option>
-        <option value="es">Español</option>
-      </select></div>
-    <div class="setrow"><label data-i18n="apikey_label">Claude API key</label>
+    <h3>Settings</h3>
+    <div class="setrow"><label>Claude API key</label>
       <input type="password" id="setApiKey" placeholder="sk-ant-… (leave empty inside Claude.ai)" autocomplete="off">
       <div class="sethint">Used on Spectacles / standalone hosting to weave legends. Stored only on this device. Without a key the game falls back to the offline legend generator (or keyless mode when run as a Claude artifact).</div></div>
-    <div class="setrow"><label><span data-i18n="model_folder">3D model folder (GLB)</label>
+    <div class="setrow"><label>3D model folder (GLB)</label>
       <input type="text" id="setModelBase" placeholder="models/" autocomplete="off">
       <div class="sethint">Folder (relative or full URL) containing optional realistic models named
       &lt;enemy&gt;.glb — e.g. wolf.glb, skeleton.glb, boss_knight.glb. Missing files silently fall back to the built-in procedural models.</div>
-      <button class="btn ghost" id="btnTestModels" style="margin:8px 6px 0 0;padding:9px 18px;font-size:11px" data-i18n="test_models">Test model files</button>
-      <button class="btn ghost" id="btnAutoBase" style="margin:8px 0 0;padding:9px 18px;font-size:11px" data-i18n="use_page_folder">Use this page's folder</button></div>
-    <div class="setrow"><label><span data-i18n="eye_label">Your height to eyes (cm)</span> <span id="vEye"></span></label>
-      <input type="range" id="setEye" min="120" max="195" step="5">
-      <div class="sethint">Places enemies' feet on the real floor in camera mode. Set near your standing eye height.</div></div>
-    <div class="setrow"><label><span data-i18n="bright">Display brightness</span> <span id="vBright"></span></label>
+      <button class="btn ghost" id="btnTestModels" style="margin:8px 6px 0 0;padding:9px 18px;font-size:11px">Test model files</button>
+      <button class="btn ghost" id="btnAutoBase" style="margin:8px 0 0;padding:9px 18px;font-size:11px">Use this page's folder</button></div>
+    <div class="setrow"><label>Display brightness <span id="vBright"></span></label>
       <input type="range" id="setBright" min="35" max="160" step="5"></div>
-    <div class="setrow"><label><span data-i18n="music_vol">Music volume</span> <span id="vMusic"></span></label>
+    <div class="setrow"><label>Music volume <span id="vMusic"></span></label>
       <input type="range" id="setMusic" min="0" max="100" step="5"></div>
-    <div class="setrow"><label><span data-i18n="music_url">Music file URL</label>
-      <input type="text" id="setMusicUrl" placeholder="https://you.github.io/repo/song.mp3" autocomplete="off">
-      <div class="sethint">Full URL to the looping track. Default points at the project root.</div>
-      <button class="btn ghost" id="btnMusicAuto" style="margin:8px 0 0;padding:9px 18px;font-size:11px" data-i18n="use_page_folder">Use this page's folder</button></div>
-    <div class="setrow"><label><span data-i18n="sfx_vol">Effects volume</span> <span id="vSfx"></span></label>
+    <div class="setrow"><label>Effects volume <span id="vSfx"></span></label>
       <input type="range" id="setSfx" min="0" max="100" step="5"></div>
-    <div class="setrow"><label><span data-i18n="text_speed">Herald text speed</span> <span id="vText"></span></label>
+    <div class="setrow"><label>Herald text speed <span id="vText"></span></label>
       <input type="range" id="setText" min="1" max="3" step="1"></div>
-    <div class="setrow"><label><span data-i18n="arrival_r">Arrival radius (m)</span> <span id="vRadius"></span></label>
+    <div class="setrow"><label>Arrival radius (m) <span id="vRadius"></span></label>
       <input type="range" id="setRadius" min="20" max="150" step="10">
       <div class="sethint">How close to the real place you must be. Raise it if GPS is poor.</div></div>
-    <div class="setrow"><label><span data-i18n="swing_s">Hand-swing sensitivity</span> <span id="vSwing"></span></label>
+    <div class="setrow"><label>Hand-swing sensitivity <span id="vSwing"></span></label>
       <input type="range" id="setSwing" min="1" max="4" step="0.5">
       <div class="sethint">Lower = easier to trigger attacks on Spectacles hand tracking.</div></div>
-    <div class="setrow"><label><span data-i18n="poi_r">POI search radius (m)</span> <span id="vPoi"></span></label>
+    <div class="setrow"><label>POI search radius (m) <span id="vPoi"></span></label>
       <input type="range" id="setPoi" min="500" max="5000" step="250"></div>
   </div>
-  <div><button class="btn" id="btnSettingsSave" style="margin-top:14px" data-i18n="save_btn">Save</button>
-  <button class="btn ghost" id="btnSettingsClose" data-i18n="back">Back</button></div>
-</div>
-
-<!-- ============ PAUSE MENU ============ -->
-<div id="pauseScreen" class="screen hidden" style="z-index:80">
-  <h1 class="title" style="font-size:clamp(24px,7vw,44px)" data-i18n="pause_title">Paused</h1>
-  <div class="rune-divider"></div>
-  <button class="btn" id="btnResume" data-i18n="resume">Resume</button>
-  <button class="btn" id="btnSaveQuit" data-i18n="save_quit">Save & Quit</button>
-  <button class="btn ghost" id="btnPauseSettings" data-i18n="settings">⚙ Settings</button>
-  <button class="btn ghost" id="btnPauseMenu" data-i18n="to_menu">Main Menu</button>
-</div>
-
-<!-- ============ SAVE SLOT PICKER (10 slots) ============ -->
-<div id="slotPicker" class="screen hidden" style="z-index:81;justify-content:flex-start;padding-top:max(24px,env(safe-area-inset-top))">
-  <div class="panel" style="max-width:560px">
-    <h3 data-i18n="save_quit">Save & Quit</h3>
-    <div id="slotPickList"></div>
-  </div>
-  <button class="btn ghost" id="btnSlotPickBack" style="margin-top:14px" data-i18n="back">Back</button>
-</div>
-
-<!-- ============ CONFIRM OVERWRITE ============ -->
-<div id="confirmScreen" class="screen hidden" style="z-index:82">
-  <div class="panel" style="max-width:440px;text-align:center">
-    <h3 id="confirmText" data-i18n="overwrite_q">Overwrite this saved pilgrimage?</h3>
-    <div id="confirmSub" style="font-size:12px;color:#8d86a5;margin-top:8px"></div>
-  </div>
-  <div style="margin-top:14px"><button class="btn" id="btnConfirmYes" data-i18n="yes">Yes</button>
-  <button class="btn ghost" id="btnConfirmNo" data-i18n="cancel">Cancel</button></div>
+  <div><button class="btn" id="btnSettingsSave" style="margin-top:14px">Save</button>
+  <button class="btn ghost" id="btnSettingsClose">Back</button></div>
 </div>
 
 <!-- ============ SAVE SLOTS ============ -->
 <div id="savesScreen" class="screen hidden" style="z-index:69">
   <div class="panel" style="max-width:560px">
-    <h3 data-i18n="saves_title">Saved Pilgrimages</h3>
+    <h3>Saved Pilgrimages</h3>
     <div id="slotsList"></div>
   </div>
-  <button class="btn ghost" id="btnSavesClose" style="margin-top:14px" data-i18n="back">Back</button>
+  <button class="btn ghost" id="btnSavesClose" style="margin-top:14px">Back</button>
 </div>
 
 <div id="brightOverlay"></div>
@@ -292,33 +251,33 @@
     </div>
     <div id="bestList" style="display:flex;flex-wrap:wrap;gap:6px"></div>
   </div>
-  <button class="btn" id="btnBestClose" style="margin-top:12px" data-i18n="close">Close</button>
+  <button class="btn" id="btnBestClose" style="margin-top:12px">Close</button>
 </div>
 
 <!-- ============ LEVEL UP ============ -->
 <div id="levelScreen" class="screen hidden" style="z-index:46">
   <div class="panel" style="max-width:560px">
-    <h3 data-i18n="level_title">Commune with the Herald — spend echoes</h3>
+    <h3>Commune with the Herald — spend echoes</h3>
     <div id="soulsBig"></div>
     <div id="statRows"></div>
   </div>
-  <button class="btn" id="btnLevelClose" style="margin-top:14px" data-i18n="done">Done</button>
+  <button class="btn" id="btnLevelClose" style="margin-top:14px">Done</button>
 </div>
 
 <!-- ============ NOTE READER ============ -->
 <div id="noteScreen" class="screen hidden">
   <div class="note-paper panel" id="notePaper"></div>
-  <button class="btn" id="btnNoteClose" style="margin-top:14px" data-i18n="fold_note">Fold the note</button>
+  <button class="btn" id="btnNoteClose" style="margin-top:14px">Fold the note</button>
 </div>
 
 <!-- ============ INVENTORY ============ -->
 <div id="inv">
-  <h2 data-i18n="satchel">Satchel</h2>
+  <h2>Satchel</h2>
   <div class="slotline" id="slotline"></div>
   <div class="invgrid" id="invgrid"></div>
   <div style="text-align:center;margin-top:16px">
-    <button class="btn ghost" id="btnBestiary" data-i18n="bestiary">Bestiary</button>
-    <button class="btn" id="btnInvClose" data-i18n="close">Close</button></div>
+    <button class="btn ghost" id="btnBestiary">Bestiary</button>
+    <button class="btn" id="btnInvClose">Close</button></div>
 </div>
 
 <!-- ============ HUD ============ -->
@@ -334,19 +293,17 @@
   <div id="bossbar"><div class="name" id="bossname"></div><div class="bar"><i id="bossfill"></i></div></div>
   <div id="hint"></div>
   <div id="controls">
-    <button class="ctl big" id="btnAtk" data-i18n="strike">Strike</button>
-    <button class="ctl" id="btnSpecial" data-i18n="scroll">Scroll</button>
-    <button class="ctl" id="btnDodge" data-i18n="dodge">Dodge</button>
+    <button class="ctl big" id="btnAtk">Strike</button>
+    <button class="ctl" id="btnSpecial">Scroll</button>
+    <button class="ctl" id="btnDodge">Dodge</button>
   </div>
   <div id="leftctl">
-    <button class="ctl" id="btnInv" data-i18n="satchel">Satchel</button>
-    <button class="ctl" id="btnPotH" data-i18n="invH">HP ◆</button>
-    <button class="ctl" id="btnPotM" data-i18n="invM">MP ◆</button>
-    <button class="ctl" id="btnArrive" data-i18n="recenter">Recenter</button>
-    <button class="ctl" id="btnWalk" data-i18n="walk">Walk ▸</button>
-    <button class="ctl" id="btnMap" data-i18n="map">Map</button>
-    <button class="ctl" id="btnLevel" data-i18n="lvl">Level</button>
-    <button class="ctl" id="btnMenu" data-i18n="menu">Menu</button>
+    <button class="ctl" id="btnInv">Satchel</button>
+    <button class="ctl" id="btnPotH">HP ◆</button>
+    <button class="ctl" id="btnPotM">MP ◆</button>
+    <button class="ctl" id="btnArrive">I have arrived</button>
+    <button class="ctl" id="btnMap">Map</button>
+    <button class="ctl" id="btnLevel">Level</button>
   </div>
 </div>
 
@@ -354,7 +311,7 @@
   <div id="leafmap"></div>
   <div id="mapBar"><div class="info" id="mapInfo"></div><button class="btn" id="btnMapClose" style="margin:0;padding:10px 22px">Close</button></div>
 </div>
-<div id="dlg"><div class="who" data-i18n="herald_caps">⚡ THE HERALD</div><div class="txt" id="dlgTxt"></div><div class="tap" data-i18n="tap_cont">tap to continue ▸</div></div>
+<div id="dlg"><div class="who">⚡ THE HERALD</div><div class="txt" id="dlgTxt"></div><div class="tap">tap to continue ▸</div></div>
 <div id="toast"></div>
 <div id="dbg" style="position:fixed;left:0;right:0;bottom:0;max-height:42vh;overflow:auto;z-index:300;display:none;
   background:rgba(0,0,0,.88);color:#7CFC9A;font:11px/1.5 monospace;padding:8px;white-space:pre-wrap;border-top:1px solid #444"></div>
@@ -372,101 +329,6 @@
    ===================================================================== */
 "use strict";
 const $ = id => document.getElementById(id);
-/* ===================== i18n (EN / ES) ===================== */
-const I18N={
-  en:{
-    gear_before:"Before you walk —",
-    gear_judged:"The Herald has judged the land between your waypoints",
-    gear_clothing:"Clothing", gear_carry:"Carry", gear_transport:"Travel between spots",
-    gear_safety:"Stay aware of traffic and people around you. The realm is layered over the real world — the real world always wins.",
-    road_through:"The road through", resumed:"resumed", echo_here:"THE ECHO WAITS HERE",
-    boss_here_taste:"This is the place. I can taste the wrongness of it.", steel:"Steel yourself.",
-    in_your_world:"In your world they call it",
-    subtitle_tag:"a legend written upon the land itself",
-    begin:"Begin the Pilgrimage", continue:"Continue a Pilgrimage",
-    demo:"Wander a Phantom Realm (no GPS)", settings:"⚙ Settings",
-    title_l1:"Echoes of", title_l2:"the Realm",
-    intro_blurb:"The Herald — a thunder-light torn from the future — will weave a dark legend from the true history of wherever you stand. Walk to real places. Slay what waits there. Face the Echo at the end.",
-    loading_sub:"the herald is reading your world", locating:"Locating your realm…",
-    prepared:"I am prepared", enter_ar:"Enter the Realm (AR)", enter_flat:"Enter without headset",
-    you_faded:"You Faded", rise:"Rise again",
-    echo_silenced:"Echo Silenced", new_quest:"Seek a new legend",
-    fold_note:"Fold the note",
-    satchel:"Satchel", close:"Close", bestiary:"Bestiary", done:"Done",
-    level_title:"Commune with the Herald — spend echoes",
-    settings_title:"Settings", save_btn:"Save", back:"Back",
-    saves_title:"Saved Pilgrimages",
-    menu:"Menu", save_quit:"Save & Quit", resume:"Resume", to_menu:"Main Menu",
-    pause_title:"Paused",
-    strike:"Strike", scroll:"Scroll", dodge:"Dodge", recenter:"Recenter", walk:"Walk ▸",
-    map:"Map", lvl:"Level", invH:"HP ◆", invM:"MP ◆",
-    overwrite_q:"Overwrite this saved pilgrimage?", yes:"Yes", cancel:"Cancel",
-    saved_ok:"Pilgrimage saved", slot_empty:"Empty slot",
-    lang_label:"Language / Idioma",
-    herald_caps:"⚡ THE HERALD", tap_cont:"tap to continue ▸",
-    bars_restore:"The zone falls silent — you are restored",
-    foes_upon:"Foes upon you — Strike!",
-    explore_hint:"Walk the world · foes roam where the map glows red. The Echo waits at the final mark.",
-    eye_label:"Your height to eyes (cm)", music_url:"Music file URL",
-    model_folder:"3D model folder (GLB)", test_models:"Test model files",
-    use_page_folder:"Use this page's folder",
-    bright:"Display brightness", music_vol:"Music volume", sfx_vol:"Effects volume",
-    text_speed:"Herald text speed", arrival_r:"Arrival radius (m)",
-    swing_s:"Hand-swing sensitivity", poi_r:"POI search radius (m)",
-    apikey_label:"Claude API key",
-    nothing_slain:"Nothing slain yet", ledger:"The Herald keeps this ledger. Fill it.",
-    world_recentered:"World recentered",
-  },
-  es:{
-    gear_before:"Antes de caminar —",
-    gear_judged:"El Heraldo ha juzgado la tierra entre tus puntos",
-    gear_clothing:"Ropa", gear_carry:"Lleva", gear_transport:"Viaje entre puntos",
-    gear_safety:"Mantente atento al tráfico y a la gente. El reino se superpone al mundo real — el mundo real siempre gana.",
-    road_through:"El camino a través de", resumed:"reanudado", echo_here:"EL ECO AGUARDA AQUÍ",
-    boss_here_taste:"Es aquí. Puedo saborear lo erróneo de este lugar.", steel:"Prepárate.",
-    in_your_world:"En tu mundo lo llaman",
-    subtitle_tag:"una leyenda escrita sobre la tierra misma",
-    begin:"Comenzar la Peregrinación", continue:"Continuar una Peregrinación",
-    demo:"Vagar por un Reino Fantasma (sin GPS)", settings:"⚙ Ajustes",
-    title_l1:"Ecos del", title_l2:"Reino",
-    intro_blurb:"El Heraldo — una luz de trueno arrancada del futuro — tejerá una leyenda oscura a partir de la verdadera historia del lugar donde estés. Camina a lugares reales. Mata lo que aguarda allí. Enfréntate al Eco al final.",
-    loading_sub:"el heraldo está leyendo tu mundo", locating:"Localizando tu reino…",
-    prepared:"Estoy preparado", enter_ar:"Entrar al Reino (RA)", enter_flat:"Entrar sin gafas",
-    you_faded:"Te Desvaneciste", rise:"Alzarse de nuevo",
-    echo_silenced:"Eco Silenciado", new_quest:"Buscar una nueva leyenda",
-    fold_note:"Doblar la nota",
-    satchel:"Morral", close:"Cerrar", bestiary:"Bestiario", done:"Hecho",
-    level_title:"Comulga con el Heraldo — gasta ecos",
-    settings_title:"Ajustes", save_btn:"Guardar", back:"Atrás",
-    saves_title:"Peregrinaciones Guardadas",
-    menu:"Menú", save_quit:"Guardar y Salir", resume:"Reanudar", to_menu:"Menú Principal",
-    pause_title:"En Pausa",
-    strike:"Golpear", scroll:"Pergamino", dodge:"Esquivar", recenter:"Recentrar", walk:"Andar ▸",
-    map:"Mapa", lvl:"Nivel", invH:"PV ◆", invM:"PM ◆",
-    overwrite_q:"¿Sobrescribir esta peregrinación guardada?", yes:"Sí", cancel:"Cancelar",
-    saved_ok:"Peregrinación guardada", slot_empty:"Ranura vacía",
-    lang_label:"Idioma / Language",
-    herald_caps:"⚡ EL HERALDO", tap_cont:"toca para continuar ▸",
-    bars_restore:"La zona queda en silencio — estás restaurado",
-    foes_upon:"¡Enemigos sobre ti — Golpea!",
-    explore_hint:"Recorre el mundo · los enemigos merodean donde el mapa brilla en rojo. El Eco aguarda en la marca final.",
-    eye_label:"Tu altura hasta los ojos (cm)", music_url:"URL del archivo de música",
-    model_folder:"Carpeta de modelos 3D (GLB)", test_models:"Probar archivos de modelos",
-    use_page_folder:"Usar la carpeta de esta página",
-    bright:"Brillo de pantalla", music_vol:"Volumen de música", sfx_vol:"Volumen de efectos",
-    text_speed:"Velocidad de texto del Heraldo", arrival_r:"Radio de llegada (m)",
-    swing_s:"Sensibilidad del golpe de mano", poi_r:"Radio de búsqueda de PDI (m)",
-    apikey_label:"Clave API de Claude",
-    nothing_slain:"Nada abatido aún", ledger:"El Heraldo lleva este registro. Llénalo.",
-    world_recentered:"Mundo recentrado",
-  }
-};
-function curLang(){try{return (Settings&&Settings.lang)||"en";}catch(e){return "en";}}
-function t(key){const L=curLang();return (I18N[L]&&I18N[L][key])||I18N.en[key]||key;}
-function applyLang(){
-  document.querySelectorAll("[data-i18n]").forEach(el=>{el.textContent=t(el.getAttribute("data-i18n"));});
-  document.documentElement.lang=curLang();
-}
 /* ---- on-screen logger (🐞 button toggles) ---- */
 const LOGBUF=[];
 function log(...a){
@@ -537,18 +399,13 @@ const Store=(()=>{
   };
 })();
 
-const PAGE_ROOT=location.href.replace(/[?#].*$/,"").replace(/[^/]*$/,"");
-const PAGE_MODELS=PAGE_ROOT+"models/";
-const BGM_URL="https://koolkatze.github.io/ECHOES-OF-THE-REALM/deuslower-medieval-ambient-236809.mp3";
-const DEFAULTS={lang:"en",apiKey:"",modelBase:PAGE_MODELS,musicUrl:BGM_URL,eyeHeight:150,bright:100,music:60,sfx:80,textSpeed:2,radius:60,swing:2.2,poi:1500};
+const PAGE_MODELS=location.href.replace(/[?#].*$/,"").replace(/[^/]*$/,"")+"models/";
+const DEFAULTS={apiKey:"",modelBase:PAGE_MODELS,bright:100,music:60,sfx:80,textSpeed:2,radius:60,swing:2.2,poi:1500};
 const Settings=Object.assign({},DEFAULTS,Store.get("eotr_settings",{}));
 if(!Settings.modelBase||Settings.modelBase==="models/"||Settings.modelBase==="./models/")
   Settings.modelBase=PAGE_MODELS;
-if(!Settings.musicUrl||Settings.musicUrl.includes("/blob/")||!/^https?:\/\//.test(Settings.musicUrl))
-  Settings.musicUrl=BGM_URL;
 function saveSettings(){Store.set("eotr_settings",Settings);applySettings();}
 function applySettings(){
-  if(Settings.eyeHeight)G.eyeHeight=Settings.eyeHeight/100;
   // brightness: dim via black overlay below 100%, boost exposure above 100%
   const b=Settings.bright;
   $("brightOverlay").style.opacity=b<100?(1-b/100)*.85:0;
@@ -565,22 +422,18 @@ const Audio=(()=>{
     musicGain=ctx.createGain();musicGain.gain.value=Settings.music/100*.35;musicGain.connect(ctx.destination);
     return true;
   }
-  let bgmEl=null,bgmStarted=false;
   function startMusic(){
-    if(bgmStarted)return;bgmStarted=true;
-    bgmEl=document.getElementById("bgm");
-    if(bgmEl){
-      const url=(Settings.musicUrl||BGM_URL);if(bgmEl.getAttribute("src")!==url)bgmEl.src=url;
-      bgmEl.loop=true;
-      bgmEl.volume=Settings.music/100;
-      const go=()=>bgmEl.play().catch(()=>{ // autoplay may need a gesture
-        const kick=()=>{bgmEl.play().catch(()=>{});removeEventListener("pointerdown",kick);};
-        addEventListener("pointerdown",kick);
-      });
-      bgmEl.addEventListener("error",()=>{log("BGM failed to load:",url);toast("⚠ music not found — check 🐞 / Settings URL",4000);},{once:true});
-      bgmEl.addEventListener("playing",()=>log("BGM playing"),{once:true});
-      go();
-    }
+    if(started||!ensure())return;started=true;
+    // low drone: two detuned oscillators through a slow-wobbling filter
+    const f=ctx.createBiquadFilter();f.type="lowpass";f.frequency.value=220;f.connect(musicGain);
+    [55,55.7,82.4].forEach((hz,i)=>{
+      const o=ctx.createOscillator();o.type=i<2?"sawtooth":"triangle";o.frequency.value=hz;
+      const g=ctx.createGain();g.gain.value=i<2?.05:.03;o.connect(g);g.connect(f);o.start();
+    });
+    const lfo=ctx.createOscillator();lfo.frequency.value=.07;
+    const lg=ctx.createGain();lg.gain.value=140;lfo.connect(lg);lg.connect(f.frequency);lfo.start();
+    // sparse bell every ~14s
+    setInterval(()=>{if(Math.random()<.6)bell();},14000);
   }
   function bell(){
     if(!ctx)return;
@@ -601,8 +454,7 @@ const Audio=(()=>{
     g.gain.setValueAtTime(P[2]*v,t);g.gain.exponentialRampToValueAtTime(.0001,t+.25);
     o.start(t);o.stop(t+.3);
   }
-  return {startMusic,sfx,setMusic(v){if(musicGain)musicGain.gain.value=v*.35;
-    const el=document.getElementById("bgm");if(el)el.volume=Math.max(0,Math.min(1,v));}};
+  return {startMusic,sfx,setMusic(v){if(musicGain)musicGain.gain.value=v*.35;}};
 })();
 
 /* --- save slots --- */
@@ -612,7 +464,7 @@ function snapshot(){
   return {legend:G.legend,spots:G.spots,spotIndex:G.spotIndex,player:G.player,
     inv:G.inv,equippedW:G.equipped.weapon?G.equipped.weapon.id:null,
     equippedS:G.equipped.scroll?G.equipped.scroll.id:null,
-    demo:G.demo,env:G.env,stats:G.stats,kills:G.kills,heat:HEAT,heatCenter:G.heatCenter,noteIdx:G._noteIdx||0,when:Date.now(),
+    demo:G.demo,env:G.env,stats:G.stats,kills:G.kills,noteIdx:G._noteIdx||0,when:Date.now(),
     region:G.legend?G.legend.regionName:"?"};
 }
 let activeSlot=null;
@@ -634,7 +486,6 @@ function loadSlot(n){
   G.legend=d.legend;G.spots=d.spots;G.spotIndex=Math.min(d.spotIndex,d.spots.length-1);
   G.player=d.player;G.inv=d.inv;G.demo=d.demo;G._noteIdx=d.noteIdx;
   G.env=d.env||"town";if(d.stats)G.stats=d.stats;G.kills=d.kills||{};applyStats();
-  if(d.heat&&d.heat.grid){Object.assign(HEAT,d.heat);}G.heatCenter=d.heatCenter||null;
   G.equipped.weapon=G.inv.find(i=>i.id===d.equippedW)||null;
   G.equipped.scroll=G.inv.find(i=>i.id===d.equippedS)||null;
   return true;
@@ -669,92 +520,15 @@ function resumeFromSave(){
   applySettings();
   show("questScreen");
   // rebuild quest panel for the loaded legend
-  $("questPanel").innerHTML=`<h3>${t("road_through")} ${G.legend.regionName} — ${t("resumed")}</h3>
+  $("questPanel").innerHTML=`<h3>The road through ${G.legend.regionName} — resumed</h3>
     <ul class="spotlist">${G.spots.map((s,i)=>{
       const here=i===G.spotIndex?" ◀ you are bound here":"";
-      return `<li style="${i<G.spotIndex?'opacity:.45':''}"><b>${i+1}. ${s.fantasyName}</b> — ${s.realName}<span>${s.decor}${i===G.spots.length-1?" · "+t("echo_here"):""}${here}</span></li>`;}).join("")}
+      return `<li style="${i<G.spotIndex?'opacity:.45':''}"><b>${i+1}. ${s.fantasyName}</b> — ${s.realName}<span>${s.decor}${i===G.spots.length-1?" · THE ECHO WAITS HERE":""}${here}</span></li>`;}).join("")}
     </ul>`;
   if(!G.demo)watchGPS();
   fetchRoute();
   renderInv();
 }
-const MAX_SLOTS=10;
-/* save the current game into slot n (n = 1..10), updating the slot index */
-function saveToSlot(n){
-  Store.set(SLOT_KEY(n),snapshot());
-  const slots=listSlots();let m=slots.find(s=>s.n===n);
-  if(!m){m={n};slots.push(m);}
-  m.when=Date.now();m.region=G.legend?G.legend.regionName:"?";
-  m.progress=`${Math.min(G.spotIndex+1,G.spots.length)}/${G.spots.length}`;m.souls=G.player.souls;
-  slots.sort((a,b)=>a.n-b.n);Store.set("eotr_slots",slots);
-  activeSlot=n;
-}
-/* render the 10-slot picker; tapping empty saves, tapping full asks to overwrite */
-function renderSlotPicker(){
-  const list=$("slotPickList");list.innerHTML="";
-  if(!Store.persistent){
-    list.innerHTML='<div class="sethint">'+ (Settings.lang==="es"
-      ?"El almacenamiento no está disponible aquí (p. ej. la vista previa de artefacto). El guardado funciona en GitHub Pages o en Spectacles."
-      :"Storage is unavailable here (e.g. the artifact preview). Saving works on GitHub Pages or Spectacles.")+'</div>';
-    return;
-  }
-  const slots=listSlots();
-  for(let n=1;n<=MAX_SLOTS;n++){
-    const ex=slots.find(s=>s.n===n);
-    const row=document.createElement("div");row.className="slotrow";
-    if(ex){row.innerHTML=`<div class="meta"><b>${n}. ${ex.region||"—"}</b>
-      <span>${t("lvl")} ${ex.progress||"?"} · ${ex.souls||0} ${Settings.lang==="es"?"ecos":"echoes"} · ${new Date(ex.when).toLocaleString()}</span></div>`;}
-    else{row.innerHTML=`<div class="meta"><b>${n}.</b> <span>${t("slot_empty")}</span></div>`;}
-    const b=document.createElement("button");b.className="btn";b.textContent=t("save_btn");
-    b.onclick=()=>{
-      if(ex){ // confirm overwrite
-        askConfirm(t("overwrite_q"),`${n}. ${ex.region||"—"} · ${ex.progress||""}`,()=>{
-          saveToSlot(n);Audio.sfx("loot");toast(t("saved_ok"));exitToMenu();});
-      }else{ saveToSlot(n);Audio.sfx("loot");toast(t("saved_ok"));exitToMenu(); }
-    };
-    row.appendChild(b);list.appendChild(row);
-  }
-}
-/* generic confirm dialog */
-let _confirmCb=null;
-function askConfirm(text,sub,cb){
-  $("confirmText").textContent=text;$("confirmSub").textContent=sub||"";_confirmCb=cb;
-  show("confirmScreen");
-}
-$("btnConfirmYes").onclick=()=>{hide("confirmScreen");const c=_confirmCb;_confirmCb=null;if(c)c();};
-$("btnConfirmNo").onclick=()=>{hide("confirmScreen");_confirmCb=null;};
-
-/* pause menu */
-function openPause(){G._paused=true;show("pauseScreen");}
-function closePause(){G._paused=false;hide("pauseScreen");}
-$("btnMenu") && ($("btnMenu").onclick=()=>{Audio.sfx("ui");openPause();});
-$("btnResume").onclick=()=>{Audio.sfx("ui");closePause();};
-$("btnSaveQuit").onclick=()=>{Audio.sfx("ui");renderSlotPicker();hide("pauseScreen");show("slotPicker");};
-$("btnSlotPickBack").onclick=()=>{hide("slotPicker");show("pauseScreen");};
-$("btnPauseSettings").onclick=()=>{openSettings();};
-$("btnPauseMenu").onclick=()=>{ // leave without saving — confirm to avoid losing progress
-  askConfirm(Settings.lang==="es"?"¿Salir al menú sin guardar?":"Return to menu without saving?","",()=>{exitToMenu();});
-};
-
-/* tear down the live game and show the title screen */
-function exitToMenu(){
-  G._paused=false;
-  // stop XR session if active
-  try{ if(G.xr&&renderer.xr.getSession){renderer.xr.getSession().end();} }catch(e){}
-  // hide all overlays
-  ["pauseScreen","slotPicker","confirmScreen","settingsScreen","savesScreen","hud","inv",
-   "levelScreen","bestiaryScreen","noteScreen","mapScreen","gearScreen","questScreen",
-   "winScreen","deathScreen","loadScreen"].forEach(id=>{const e=$(id);if(e){e.classList.add("hidden");e.style.display="";}});
-  $("hud").style.display="none";
-  // clear world + state so a fresh game can start
-  if(typeof clearBossArena==="function")clearBossArena();
-  for(const e of (G.world||[]))scene&&scene.remove(e);
-  G.world=[];G.worldBuilt=false;G.boss=null;G.enemies=[];HEAT.clusters=[];HEAT.grid=[];
-  G.legend=null;G.spots=[];G.spotIndex=0;G.phase="title";
-  updContinueBtn();applyLang();
-  show("titleScreen");
-}
-
 function updContinueBtn(){
   $("btnContinue").style.display=(Store.persistent&&listSlots().length)?"":"none";
 }
@@ -825,155 +599,6 @@ function initHeading(){
     addEventListener("deviceorientation",onAbs,true);
   }
 }
-async function fetchBiomeFeatures(lat,lon,radius=1500){
-  // wide net: water, green, urban, transport — used to build the micro-biome heatmap
-  const q=`[out:json][timeout:30];
-    (
-      node(around:${radius},${lat},${lon})[natural~"water|wood|tree|peak|beach|spring|coastline|wetland|sand|scrub|grassland"];
-      way(around:${radius},${lat},${lon})[natural~"water|wood|coastline|beach|wetland|scrub|grassland"];
-      way(around:${radius},${lat},${lon})[waterway~"river|stream|canal|riverbank"];
-      way(around:${radius},${lat},${lon})[leisure~"park|garden|nature_reserve|pitch"];
-      way(around:${radius},${lat},${lon})[landuse~"forest|meadow|grass|residential|industrial|commercial|retail|farmland|cemetery"];
-      node(around:${radius},${lat},${lon})[amenity~"place_of_worship|marketplace|townhall|fountain|grave_yard"];
-      node(around:${radius},${lat},${lon})[historic];
-      way(around:${radius},${lat},${lon})[building][!landuse];
-    );
-    out center 240;`;
-  try{
-    const r=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",
-      body:"data="+encodeURIComponent(q),
-      headers:{"Content-Type":"application/x-www-form-urlencoded"}});
-    const j=await r.json();
-    return j.elements.map(e=>({lat:e.lat??e.center?.lat,lon:e.lon??e.center?.lon,tags:e.tags||{}}))
-      .filter(f=>f.lat&&f.lon);
-  }catch(e){log("biome fetch failed:",e.message||e);return [];}
-}
-/* classify one OSM feature into a micro-biome key matching our enemy biomes */
-function featureBiome(t){
-  if(!t)return null;
-  if(/water|river|stream|canal|riverbank|wetland|spring/.test(JSON.stringify(t))&&!t.building)return "water";
-  if(t.natural==="beach"||t.natural==="sand"||t.natural==="coastline")return "beach";
-  if(t.natural==="wood"||t.landuse==="forest"||t.natural==="tree"||t.natural==="scrub")return "forest";
-  if(t.leisure==="park"||t.leisure==="garden"||t.leisure==="nature_reserve"||t.landuse==="meadow"||t.landuse==="grass"||t.natural==="grassland")return "park";
-  if(t.natural==="peak")return "mountain";
-  if(t.landuse==="cemetery"||t.amenity==="grave_yard")return "grave";
-  if(t.historic||t.amenity==="place_of_worship")return "ruins";
-  if(t.building||t.landuse==="residential"||t.landuse==="commercial"||t.landuse==="retail"||t.landuse==="industrial")return "urban";
-  return null;
-}
-/* map a micro-biome → the enemy pool key + a beach/water flag */
-const MICRO_TO_ENV={water:"beach",beach:"beach",forest:"wilderness",mountain:"wilderness",
-  park:"wilds",grave:"town",ruins:"city",urban:"city"};
-
-/* =====================================================================
-   ENEMY HEATMAP — grid of density cells over the play area.
-   Each cell gets a dominant micro-biome + a heat value (0..1).
-   Red(>.66)=many enemies, Yellow(.33-.66)=some, Green(<.33)=few.
-   ===================================================================== */
-const HEAT={grid:[],cols:0,rows:0,cell:0,lat0:0,lon0:0,latSpan:0,lonSpan:0,clusters:[]};
-function metersPerDeg(lat){return {mlat:111320,mlon:111320*Math.cos(lat*Math.PI/180)};}
-function buildHeatmap(features,centerLat,centerLon,radius){
-  const N=12; // 12x12 grid
-  const {mlat,mlon}=metersPerDeg(centerLat);
-  const dLat=radius/mlat, dLon=radius/mlon;
-  HEAT.lat0=centerLat-dLat;HEAT.lon0=centerLon-dLon;
-  HEAT.latSpan=2*dLat;HEAT.lonSpan=2*dLon;
-  HEAT.cols=HEAT.rows=N;HEAT.cell=radius*2/N;
-  // accumulate feature counts + biome votes per cell
-  const grid=[];
-  for(let r=0;r<N;r++){grid[r]=[];for(let c=0;c<N;c++)grid[r][c]={count:0,votes:{},heat:0,biome:"urban"};}
-  for(const f of features){
-    const bi=featureBiome(f.tags);if(!bi)continue;
-    const cx=Math.floor((f.lon-HEAT.lon0)/HEAT.lonSpan*N);
-    const cy=Math.floor((f.lat-HEAT.lat0)/HEAT.latSpan*N);
-    if(cx<0||cy<0||cx>=N||cy>=N)continue;
-    const cell=grid[cy][cx];cell.count++;cell.votes[bi]=(cell.votes[bi]||0)+1;
-  }
-  // smooth counts (3x3 blur) so heat forms gradients, then normalize
-  let max=0;const sm=[];
-  for(let r=0;r<N;r++){sm[r]=[];for(let c=0;c<N;c++){
-    let sum=0,n=0;
-    for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
-      const rr=r+dr,cc=c+dc;if(rr<0||cc<0||rr>=N||cc>=N)continue;
-      sum+=grid[rr][cc].count*(dr===0&&dc===0?2:1);n++;}
-    sm[r][c]=sum/n;max=Math.max(max,sm[r][c]);}}
-  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
-    const cell=grid[r][c];
-    cell.heat=max>0?sm[r][c]/max:0;
-    // dominant biome (fallback to neighbors/global env)
-    let best=null,bv=0;for(const k in cell.votes)if(cell.votes[k]>bv){bv=cell.votes[k];best=k;}
-    cell.biome=best||null;
-  }
-  // fill empty-biome cells from nearest voted cell
-  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
-    if(grid[r][c].biome)continue;
-    let found=null,bd=1e9;
-    for(let rr=0;rr<N;rr++)for(let cc=0;cc<N;cc++){
-      if(!grid[rr][cc].biome)continue;const d=(rr-r)**2+(cc-c)**2;if(d<bd){bd=d;found=grid[rr][cc].biome;}}
-    grid[r][c].biome=found||"urban";
-  }
-  HEAT.grid=grid;
-  buildClusters();
-  // guarantee a populated field even when OSM returns little
-  if(HEAT.clusters.length<3){
-    log("heatmap sparse ("+HEAT.clusters.length+") → seeding synthetic zones");
-    seedSyntheticHeat(centerLat,centerLon,radius);
-  }
-  return grid;
-}
-function seedSyntheticHeat(centerLat,centerLon,radius){
-  const N=HEAT.cols||12;
-  if(!HEAT.grid.length){ // ensure a grid exists
-    const {mlat,mlon}=metersPerDeg(centerLat);
-    HEAT.lat0=centerLat-radius/mlat;HEAT.lon0=centerLon-radius/mlon;
-    HEAT.latSpan=2*radius/mlat;HEAT.lonSpan=2*radius/mlon;HEAT.cols=HEAT.rows=N;HEAT.cell=radius*2/N;
-    HEAT.grid=[];for(let r=0;r<N;r++){HEAT.grid[r]=[];for(let c=0;c<N;c++)HEAT.grid[r][c]={count:0,votes:{},heat:0,biome:null};}
-  }
-  const envBiomes={beach:["water","beach"],wilderness:["forest","mountain"],city:["urban","ruins"],
-    town:["urban","grave"],wilds:["park","forest"]}[G.env]||["urban"];
-  // 3 hot centers with gaussian falloff
-  const centers=[[.3,.3],[.7,.6],[.45,.8]];
-  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
-    let h=0;for(const [cr,cc] of centers){const d=Math.hypot(r/N-cr,c/N-cc);h=Math.max(h,Math.exp(-(d*d)/0.04));}
-    HEAT.grid[r][c].heat=Math.max(HEAT.grid[r][c].heat,h*rand(.7,1));
-    if(!HEAT.grid[r][c].biome)HEAT.grid[r][c].biome=choice(envBiomes);
-  }
-  buildClusters();
-  log("synthetic heatmap:",HEAT.clusters.length,"clusters");
-}
-function cellCenterLatLon(r,c){
-  return [HEAT.lat0+(r+0.5)/HEAT.rows*HEAT.latSpan,
-          HEAT.lon0+(c+0.5)/HEAT.cols*HEAT.lonSpan];
-}
-/* turn hot cells into discrete enemy clusters anchored to GPS */
-function buildClusters(){
-  HEAT.clusters=[];
-  for(let r=0;r<HEAT.rows;r++)for(let c=0;c<HEAT.cols;c++){
-    const cell=HEAT.grid[r][c];
-    if(cell.heat<0.05)continue; // skip only truly empty
-    // enemy count scales with heat: green ~3, yellow ~6, red ~10
-    const n=Math.max(3,Math.round(3+cell.heat*8));
-    const [lat,lon]=cellCenterLatLon(r,c);
-    const env=MICRO_TO_ENV[cell.biome]||"town";
-    HEAT.clusters.push({lat,lon,baseCount:n,count:n,heat:cell.heat,biome:cell.biome,env,cleared:false,clearedAt:0});
-  }
-  // sort by heat so red zones are most prominent on the map
-  HEAT.clusters.sort((a,b)=>b.heat-a.heat);
-  log("heatmap:",HEAT.clusters.length,"enemy clusters · hottest",
-    (HEAT.clusters[0]?.count||0),"foes");
-}
-function heatColor(h){ // green→yellow→red
-  if(h<0.33)return "#3aa860";
-  if(h<0.66)return "#e8b33a";
-  return "#9c2f2f";
-}
-const FALLBACK_ZONES_EN={water:"The Drowned Shallows",beach:"The Salt Reach",forest:"The Gallows Wood",
-  mountain:"The Cold Vigil",park:"The Hollow Green",grave:"The Unquiet Field",ruins:"The Broken Sanctum",urban:"The Ashen Quarter"};
-const FALLBACK_ZONES_ES={water:"Los Bajíos Ahogados",beach:"El Confín Salado",forest:"El Bosque del Patíbulo",
-  mountain:"La Vigilia Fría",park:"El Verdor Hueco",grave:"El Campo Inquieto",ruins:"El Santuario Roto",urban:"El Barrio Ceniciento"};
-function FALLBACK_ZONES(){return (Settings.lang==="es")?FALLBACK_ZONES_ES:FALLBACK_ZONES_EN;}
-function zoneName(biome){return (G.legend&&G.legend.zoneThemes&&G.legend.zoneThemes[biome])||FALLBACK_ZONES()[biome]||biome;}
-
 async function fetchPOIs(lat,lon,radius=1500){
   const q=`[out:json][timeout:25];
     (
@@ -1018,20 +643,17 @@ function envType(pois,tags){
    ===================================================================== */
 async function weaveLegend(pois, env, place){
   const poiList=pois.slice(0,12).map(p=>`- ${p.name} (${Object.entries(p.tags).slice(0,3).map(([k,v])=>k+"="+v).join(", ")})`).join("\n");
-  const bioCount={};for(let r=0;r<HEAT.rows;r++)for(let c=0;c<HEAT.cols;c++){const b=HEAT.grid[r]&&HEAT.grid[r][c]&&HEAT.grid[r][c].biome;if(b)bioCount[b]=(bioCount[b]||0)+1;}
-  const bioSummary=Object.entries(bioCount).sort((a,b)=>b[1]-a[1]).map(([k])=>k).slice(0,5).join(", ")||env;
-  const prompt=`You are the lore engine of a dark-medieval-fantasy AR soulslike. The player physically stands near: ${place||"an unknown settlement"} (environment type: ${env}). Surrounding micro-biomes (most common first): ${bioSummary}. If water or beach appears there is a real river/coast nearby — weave drowned/tide themes there.\nReal nearby points of interest:
+  const prompt=`You are the lore engine of a dark-medieval-fantasy AR soulslike. The player physically stands near: ${place||"an unknown settlement"} (environment type: ${env}). Real nearby points of interest:
 ${poiList||"- (none found — invent a ruined hamlet)"}
 
-Write ALL human-readable text (regionName, intro, gear items, boss name/title/lore/phase names+taunts, spot fantasyNames+clues, notes, zoneThemes) in ${curLang()==="es"?"SPANISH":"ENGLISH"}. Keep JSON keys in English. Reinterpret the REAL identity/history of these places into ONE dark fantasy legend. Respond ONLY with JSON, no markdown fences, with this exact shape:
+Reinterpret the REAL identity/history of these places into ONE dark fantasy legend. Respond ONLY with JSON, no markdown fences, with this exact shape:
 {
  "regionName": "fantasy name of the realm",
  "intro": ["2-4 short Herald dialogue lines introducing the quest, ominous, second person"],
  "gear": {"clothing":["3-4 real-world items appropriate for walking this ${env} environment"],"objects":["3-4 real items: water, phone charged, etc"],"transport":["1-2 realistic ways to move between these spots"]},
  "boss": {"name":"...", "title":"...", "type":"MUST be one of: ${(BIOME_BOSSES[env]||BIOME_BOSSES.town).join("|")} (these suit this biome)", "lore":"2 sentences tying it to the real history of the final place", "phases":[{"name":"...","taunt":"..."},{"name":"...","taunt":"..."},{"name":"...","taunt":"..."}]},
  "spots": [for 3 to 5 of the listed real POIs, ordered as a walking route, each: {"realName":"exact real name from the list","fantasyName":"...","clue":"1 Herald line pointing to the NEXT spot, poetic","decor":"one of: graveyard|ruins|shrine|grove|battlefield","enemy":"short enemy name themed to the boss"}],
- "notes": [3 items: {"title":"...","text":"3-5 sentence in-world note, darker and deeper than the Herald's telling, grounded in the real place's story"}],
- "zoneThemes": {"a one-line dark-fantasy name for EACH present micro-biome, keyed exactly by biome word, e.g.": "", "water":"The Drowned Shallows","forest":"...","urban":"...","grave":"...","ruins":"...","park":"...","mountain":"...","beach":"..."}
+ "notes": [3 items: {"title":"...","text":"3-5 sentence in-world note, darker and deeper than the Herald's telling, grounded in the real place's story"}]
 }`;
   const headers={"Content-Type":"application/json"};
   if(Settings.apiKey){headers["x-api-key"]=Settings.apiKey;headers["anthropic-version"]="2023-06-01";
@@ -1064,40 +686,9 @@ function normalizeLegend(ai,fb){
     decor:DECOR[sp.decor]?sp.decor:"ruins",
     enemy:sp.enemy||"Husk"}));
   if(!Array.isArray(L.notes)||!L.notes.length)L.notes=fb.notes;
-  L.zoneThemes=(ai.zoneThemes&&typeof ai.zoneThemes==="object")?ai.zoneThemes:{};
   return L;
 }
-function fallbackLegendES(pois, env){
-  const names=pois.length?pois:[{name:"Cruce Olvidado"},{name:"Pozo Hueco"},{name:"Capilla Rota"},{name:"Colina del Patíbulo"}];
-  const picks=names.slice(0,4);
-  const decors=["graveyard","ruins","shrine","grove","battlefield"];
-  return {
-    regionName:"La Marcha Cenicienta",
-    intro:["Atravesé nueve siglos para encontrarte. Escucha.",
-      "Cada piedra a tu alrededor recuerda un nombre que la obligaron a olvidar.",
-      "Camina hacia donde te señale. Rompe lo que se interponga. Al final, un Eco aguarda — y sabe que vienes."],
-    gear:{
-      clothing: env==="wilderness"?["Botas de montaña","Chaqueta por capas","Gorro","Cortavientos"]:["Zapatos cómodos para caminar","Chaqueta según el clima","Una gorra para el sol"],
-      objects: ["Teléfono o Spectacles cargados","Botella de agua","Un tentempié","Batería portátil"],
-      transport: env==="city"?["A pie","Transporte público entre puntos lejanos"]:["A pie","Una bicicleta si los senderos lo permiten"]
-    },
-    boss:{name:"Vellmar",title:"el Tributo Insepulto",type:(BIOME_BOSSES[env]||["wraith"])[0],
-      lore:"Cuando la vieja campana de este lugar sonó por última vez, sonó solo por los muertos. Lo que respondió jamás se fue.",
-      phases:[{name:"El Tañido",taunt:"Tú también lo oyes, ¿verdad?"},
-              {name:"La Procesión",taunt:"Únete a los demás. Ya caminan tras de ti."},
-              {name:"El Silencio",taunt:"…"}]},
-    spots:picks.map((p,i)=>({realName:p.name,fantasyName:"El "+choice(["Llanto","Hueco","Ceniciento","Hundido","Pálido"])+" "+choice(["Portón","Velatorio","Escalón","Coro","Tuétano"]),
-      clue:i<picks.length-1?`El viento arrastra ceniza hacia ${picks[i+1].name}. Síguela antes de que se pose.`:"Aquí. Aquí termina.",
-      decor:decors[i%decors.length],enemy:choice(["Penitente Hueco","Sombra Atada a la Campana","Centinela de Óxido","Cría de Tumba"])})),
-    notes:[
-      {title:"Una deuda de campanas",text:"Dicen que el fundidor mezcló ceniza de hueso en el bronce para que los muertos pudieran oírla. Le pagaron con silencio. Lo enterramos de pie, mirando la torre, para que contemplara lo que había hecho. Aún contempla."},
-      {title:"El registro del último guardián",text:"Día 40. Los peregrinos dejaron de venir cuando el camino aprendió a moverse de noche. Lo cartografío cada amanecer y cada amanecer miente distinto. Ya no creo que construyéramos estos senderos. Creo que crecieron, y que tienen hambre."},
-      {title:"Sin firma",text:"Si encontraste esto, la luz te encontró antes. No confíes en todo lo que dice sobre el futuro. Volvió por una razón que no nombrará. Pregúntale de quién tomó prestada la voz."}
-    ]
-  };
-}
 function fallbackLegend(pois, env){
-  if(curLang()==="es")return fallbackLegendES(pois,env);
   const names=pois.length?pois:[{name:"Forgotten Crossroads"},{name:"Hollow Well"},{name:"Broken Chapel"},{name:"Gallows Hill"}];
   const picks=names.slice(0,4);
   const decors=["graveyard","ruins","shrine","grove","battlefield"];
@@ -1204,45 +795,8 @@ function cylM(r,h,c){return new THREE.Mesh(new THREE.CylinderGeometry(r,r*1.15,h
 function prop(m,x,y,z,rx=0,rz=0){m.position.set(x,y+m.geometry.parameters.height/2||y,z);m.rotation.x=rx;m.rotation.z=rz;m.userData.decor=true;return m;}
 
 let decorGroup=null;
-function dangerCount(cl){
-  // base count from heat, scaled by player progression so red zones stay lethal.
-  // every 2 total stat-levels adds ~12% more foes; capped per heat tier.
-  const lvl=totalLevels();
-  const scale=1+Math.min(lvl,20)*0.06;                  // up to +120% at level 20
-  const tierCap=cl.heat>=.66?18:cl.heat>=.33?12:7;      // red/yellow/green ceilings
-  return clamp(Math.round(cl.baseCount*scale),3,tierCap);
-}
-const RESPAWN_MS=5*60*1000;   // a cleared pack returns after 5 minutes…
-const RESPAWN_DIST=120;       // …but only if you have moved away from it
-function refreshRespawns(lat,lon){
-  const now=Date.now();let changed=false;
-  for(const cl of HEAT.clusters){
-    if(!cl.cleared)continue;
-    const away=(lat==null)||haversine(lat,lon,cl.lat,cl.lon)>RESPAWN_DIST;
-    if(away&&now-cl.clearedAt>RESPAWN_MS){
-      cl.cleared=false;cl.clearedAt=0;cl.count=dangerCount(cl);changed=true;
-      if(G.worldBuilt){const n=cl.count;for(let i=0;i<n;i++){
-        const type=pickClusterType(cl);const ang=Math.random()*6.28,rad=rand(4,18);
-        const [elat,elon]=offsetLatLon(cl.lat,cl.lon,Math.sin(ang)*rad,Math.cos(ang)*rad);
-        makeWorldEnemy(type,elat,elon).userData.cluster=cl;}}
-    }
-  }
-  if(changed){G._heatDirty=true;autosave();}
-}
-function nearestCluster(lat,lon){
-  let best=null,bd=1e9;
-  for(const cl of HEAT.clusters){if(cl.cleared)continue;
-    const d=haversine(lat,lon,cl.lat,cl.lon);if(d<bd){bd=d;best=cl;}}
-  return best&&bd<Math.max(HEAT.cell,70)?best:null;
-}
 function buildEncounter(spot,isBoss){
   clearEncounter();
-  // if standing in/near a heat cluster, use its biome + enemy count
-  G._activeCluster=(!isBoss&&G.lat!=null)?nearestCluster(G.lat,G.lon):null;
-  if(G._activeCluster){const cl=G._activeCluster;
-    const tierEN=cl.heat>=.66?"a red swarm":cl.heat>=.33?"a yellow pack":"a green few";
-    const tierES=cl.heat>=.66?"un enjambre rojo":cl.heat>=.33?"una jauría amarilla":"unos pocos verdes";
-    toast(zoneName(cl.biome)+" — "+(Settings.lang==="es"?tierES:tierEN)+" ("+dangerCount(cl)+")",2600);}
   decorGroup=new THREE.Group(); scene.add(decorGroup);
   const theme=DECOR[spot.decor]||DECOR.ruins;
   scene.fog=new THREE.FogExp2(theme.fog,.12);
@@ -1263,7 +817,7 @@ function buildEncounter(spot,isBoss){
   // enemies or boss
   if(isBoss) spawnBoss(spot);
   else{
-    const n=G._activeCluster?dangerCount(G._activeCluster):(2+Math.floor(Math.random()*2));
+    const n=2+Math.floor(Math.random()*2);
     for(let i=0;i<n;i++) spawnEnemy(spot,i,n);
   }
   G.encounterActive=true;
@@ -1794,8 +1348,7 @@ const DECOR_BIAS={ // decor nudges which pool members show up first
   battlefield:["minotaur","skeleton","goblin","wolf"],
 };
 function pickEnemyType(spot){
-  const envKey=(G._activeCluster&&G._activeCluster.env)||G.env;
-  const pool=BIOME_ENEMIES[envKey]||BIOME_ENEMIES.town;
+  const pool=BIOME_ENEMIES[G.env]||BIOME_ENEMIES.town;
   const bias=(DECOR_BIAS[spot.decor]||[]).filter(t=>pool.includes(t));
   return (bias.length&&Math.random()<.7)?choice(bias):choice(pool);
 }
@@ -1809,204 +1362,6 @@ function spawnEnemy(spot,i,n){
     name:(spot.enemy&&Math.random()<.4)?spot.enemy:type,
     speed:st.speed*rand(.85,1.15),dmg:st.dmg,souls:st.souls,fly:st.fly||0,anim:e.anim,animRefs:e};
   (decorGroup||scene).add(e);G.enemies.push(e);
-}
-/* =====================================================================
-   PERSISTENT WORLD ENTITIES — every enemy & boss exists in the world at
-   real GPS coordinates from the start, positioned each frame by offset
-   from the player. No "arrive" button: walk up to them to fight.
-   ===================================================================== */
-G.world=[];            // all live world entities (enemies + boss)
-G.eyeHeight=1.5;       // assumed standing eye height (m) when no floor plane is known
-G.floorY=0;            // world-Y of the real ground; updated each frame
-function currentFloorY(){
-  // Best source first: a live hit-test floor sample (real ground the camera sees).
-  if(G.xr&&G.hitFloorY!=null)return G.hitFloorY;
-  // Else a local-floor reference puts the floor at y=0.
-  if(G.xr&&G._hasFloorRef)return 0;
-  // Else assume the floor sits eyeHeight below the camera.
-  return camera.position.y-G.eyeHeight;
-}
-let _hitTmp=null;
-function sampleHitTest(xrFrame){
-  if(!G.hitReady||!G.hitSource||!xrFrame)return;
-  try{
-    const refSpace=renderer.xr.getReferenceSpace();
-    const results=xrFrame.getHitTestResults(G.hitSource);
-    if(results&&results.length){
-      const pose=results[0].getPose(refSpace);
-      if(pose){
-        const y=pose.transform.position.y;
-        // smooth so a momentary bad sample doesn't pop the floor
-        G.hitFloorY=(G.hitFloorY==null)?y:G.hitFloorY+(y-G.hitFloorY)*0.2;
-        G._lastHitT=performance.now();
-      }
-    }else if(G._lastHitT&&performance.now()-G._lastHitT>4000){
-      G.hitFloorY=null; // lost tracking for a while → fall back to other methods
-    }
-  }catch(e){/* frame without hit-test, ignore */}
-}
-G.worldBuilt=false;
-const ENGAGE_R=20;      // rendered-metres: enemy becomes active/aggressive
-const VISIBLE_R=80;     // metres: enemy mesh is in the scene at all
-function offsetLatLon(lat,lon,dN,dE){const {mlat,mlon}=metersPerDeg(lat);
-  return [lat+dN/mlat, lon+dE/mlon];}
-function makeWorldEnemy(type,lat,lon){
-  const st=ENEMY_STATS[type];
-  const e=applyRealism(BUILDERS[type](),type);
-  tryUpgradeModel(e,type);
-  e.visible=false;
-  e.userData={enemy:true,world:true,kind:type,hp:st.hp,hpMax:st.hp,state:"idle",cd:rand(1,2.5),
-    name:type,speed:st.speed*rand(.85,1.15),dmg:st.dmg,souls:st.souls,fly:st.fly||0,
-    anim:e.anim,animRefs:e,lat,lon,
-    wanderAng:Math.random()*6.28,wanderT:0,homeLat:lat,homeLon:lon};
-  scene.add(e);G.world.push(e);return e;
-}
-function makeWorldBoss(lat,lon){
-  const b=G.legend.boss;
-  const m=applyRealism((BOSS_BUILDERS[b.type]||BOSS_BUILDERS.knight)(),b.type);
-  tryUpgradeModel(m,"boss_"+b.type);
-  m.visible=false;
-  m.userData={boss:true,world:true,hp:240,hpMax:240,phase:0,state:"idle",cd:2,combo:[],comboT:0,
-    speed:.5,name:b.name,dmg:14,lat,lon,homeLat:lat,homeLon:lon,introDone:false};
-  m.anim=m.anim;scene.add(m);G.world.push(m);G.boss=m;return m;
-}
-function buildWorld(){
-  if(G.worldBuilt)return;G.worldBuilt=true;
-  // 1) enemies from every heat cluster, scattered around each cluster centre
-  for(const cl of HEAT.clusters){
-    const n=dangerCount(cl);
-    for(let i=0;i<n;i++){
-      const type=pickClusterType(cl);
-      const ang=Math.random()*6.28, rad=rand(4,18);
-      const [elat,elon]=offsetLatLon(cl.lat,cl.lon,Math.sin(ang)*rad,Math.cos(ang)*rad);
-      makeWorldEnemy(type,elat,elon).userData.cluster=cl;
-    }
-  }
-  // 2) boss at the final spot
-  const last=G.spots[G.spots.length-1];
-  if(last)makeWorldBoss(last.lat,last.lon);
-  // 3) a few wandering enemies along the route so the path is never empty
-  for(const sp of G.spots.slice(0,-1)){
-    const env=G.env, pool=BIOME_ENEMIES[env]||BIOME_ENEMIES.town;
-    for(let i=0;i<2;i++){
-      const ang=Math.random()*6.28,rad=rand(5,20);
-      const [elat,elon]=offsetLatLon(sp.lat,sp.lon,Math.sin(ang)*rad,Math.cos(ang)*rad);
-      makeWorldEnemy(choice(pool),elat,elon);
-    }
-  }
-  log("world built:",G.world.length,"entities ("+(G.world.length-1)+" foes + boss)");
-}
-function pickClusterType(cl){
-  const env=cl.env||G.env, pool=BIOME_ENEMIES[env]||BIOME_ENEMIES.town;
-  const bias=(DECOR_BIAS[ {water:"graveyard",beach:"graveyard",forest:"grove",mountain:"battlefield",
-    park:"grove",grave:"graveyard",ruins:"ruins",urban:"ruins"}[cl.biome]||"ruins" ]||[]).filter(t=>pool.includes(t));
-  return (bias.length&&Math.random()<.7)?choice(bias):choice(pool);
-}
-/* position every world entity by its GPS offset from the player, each frame */
-function updateWorld(dt){
-  if(G.lat==null){ // no GPS yet (e.g. demo pre-origin): keep hidden
-    for(const e of G.world)e.visible=false;return;
-  }
-  G.floorY=currentFloorY();
-  const {mlat,mlon}=metersPerDeg(G.lat);
-  const head=(G.heading||0)*Math.PI/180;
-  for(let i=G.world.length-1;i>=0;i--){
-    const e=G.world[i],u=e.userData;
-    // metres east/north from player
-    const dN=(u.lat-G.lat)*mlat, dE=(u.lon-G.lon)*mlon;
-    const dist=Math.hypot(dN,dE);
-    if(dist>VISIBLE_R){e.visible=false;continue;}
-    e.visible=true;
-    // Render distance: 1:1 within 25 m, gently compressed beyond so distant foes stay on-screen
-    // but walking ALWAYS closes the gap (monotonic, never clamps you out).
-    const renderDist=dist<=25?dist:25+(dist-25)*0.35;
-    const k=renderDist/Math.max(dist,0.001);
-    const localE=dE*k, localN=dN*k;
-    // heading is clockwise-from-north. Bearing east = +x, north = -z (forward).
-    const x= localE*Math.cos(head)-localN*Math.sin(head);
-    const z=-(localN*Math.cos(head)+localE*Math.sin(head));
-    const tx=camera.position.x+x, tz=camera.position.z+z;
-    // engage by RENDERED proximity so what looks close IS fightable
-    if(u.state!=="active"&&renderDist<ENGAGE_R){
-      u.state="active";
-      const fl=currentFloorY();                 // hit-test floor if available, else fallback
-      u.groundY=fl;                              // remember real ground for this entity
-      const fx=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);fx.y=0;fx.normalize();
-      e.position.set(camera.position.x+fx.x*Math.min(renderDist,4),
-                     fl+(u.fly?Math.min(u.fly,0.9):0),
-                     camera.position.z+fx.z*Math.min(renderDist,4));
-      if(u.boss&&!u.introDone)bossIntro(e);
-      if(G.hitFloorY!=null)log("engage: planted on hit-test floor y=",fl.toFixed(2));
-    }
-    // disengage only if you really walk off (GPS distance, not render)
-    if(u.state==="active"&&dist>ENGAGE_R*2.2){u.state="idle";if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}}
-    if(u.state==="idle"){
-      e.position.x+=(tx-e.position.x)*Math.min(1,dt*4);
-      e.position.z+=(tz-e.position.z)*Math.min(1,dt*4);
-      e.position.y=G.floorY+(u.fly?u.fly:0);   // feet on the real ground (flyers hover above it)
-      animEnemy(e,dt,clock.elapsedTime);
-      e.lookAt(camera.position.x,e.position.y,camera.position.z);
-    }else{ // active: combat AI owns motion (chases the camera directly)
-      if(u.boss)bossThink(e,dt);else enemyThink(e,dt);
-    }
-  }
-  // engagement music / hint
-  const near=G.world.some(e=>e.userData.state==="active");
-  if(near!==G._inCombat){G._inCombat=near;
-    $("hint").textContent=near?t("foes_upon"):"";}
-}
-let arenaGroup=null;
-function hitFloorInDir(dx,dz,fallback){
-  // Best effort: we only have a forward viewer hit-test, so use the live floor sample
-  // (already the real ground) and let props sit on it. Returns a Y for that ground.
-  return (G.hitFloorY!=null)?G.hitFloorY:(fallback!=null?fallback:currentFloorY());
-}
-const BOSS_ARENA={
-  wraith:{fog:0x140a22,glow:0x6e5cff,prop:()=>cylM(rand(.14,.22),rand(.7,1.5),0x3c3450)}, // broken pillars
-  beast:{fog:0x0c1408,glow:0x6abf4a,prop:()=>cylM(.08,rand(1.4,2.2),0x24301a)},            // dead trees
-  knight:{fog:0x10131a,glow:0xff6a3a,prop:()=>boxM(.4,rand(.6,1.1),.1,0x44484e)},          // tomb slabs
-  sorcerer:{fog:0x0a1822,glow:0x44ddff,prop:()=>boxM(.3,rand(.5,.9),.3,0x2a3a44)},          // rune blocks
-  colossus:{fog:0x141414,glow:0x8a4aff,prop:()=>boxM(rand(.3,.6),rand(.4,.8),rand(.3,.6),0x5a5a64)}, // rubble
-};
-function buildBossArena(){
-  if(arenaGroup)return;
-  const type=G.legend.boss.type, A=BOSS_ARENA[type]||BOSS_ARENA.knight;
-  arenaGroup=new THREE.Group();scene.add(arenaGroup);
-  scene.fog=new THREE.FogExp2(A.fog,0.10);
-  const cx=camera.position.x, cz=camera.position.z;
-  // ring of props around the player at 2.5–5 m, floor-anchored
-  const count=10;
-  for(let i=0;i<count;i++){
-    const ang=i/count*Math.PI*2 + rand(-.15,.15);
-    const rad=rand(2.5,5);
-    const dx=Math.cos(ang)*rad, dz=Math.sin(ang)*rad;
-    const p=A.prop();
-    const gy=hitFloorInDir(dx,dz,currentFloorY());
-    p.position.set(cx+dx, gy + (p.geometry.parameters.height||1)/2, cz+dz);
-    p.rotation.y=rand(0,6.28);p.rotation.z=rand(-.12,.12);
-    p.userData.decor=true;arenaGroup.add(p);
-  }
-  // central ground glow under the boss for drama
-  const glow=new THREE.PointLight(A.glow,1.6,8);glow.position.set(cx,currentFloorY()+0.4,cz-3);
-  arenaGroup.add(glow);
-  // faint ground ring marking the arena
-  const ring=new THREE.Mesh(new THREE.RingGeometry(4.4,4.7,48),
-    new THREE.MeshBasicMaterial({color:A.glow,transparent:true,opacity:.25,side:THREE.DoubleSide}));
-  ring.rotation.x=-Math.PI/2;ring.position.set(cx,currentFloorY()+0.02,cz);
-  arenaGroup.add(ring);
-  log("boss arena built ("+type+") on floor y=",currentFloorY().toFixed(2));
-}
-function clearBossArena(){
-  if(arenaGroup){scene.remove(arenaGroup);arenaGroup=null;}
-  scene.fog=null;
-}
-function bossIntro(b){
-  b.userData.introDone=true;
-  const L=G.legend.boss;
-  $("bossbar").style.display="block";$("bossname").textContent=`${L.name}, ${L.title}`;
-  Audio.sfx("boss");
-  buildBossArena();
-  Dlg.say([L.lore,`${L.name} — ${L.phases[0].name}. ${L.phases[0].taunt}`]);
 }
 /* --- boss with phases & combos --- */
 const BIOME_BOSSES={
@@ -2126,13 +1481,8 @@ function bossThink(b,dt){
     }
     return;
   }
-  const bdx=camera.position.x-b.position.x,bdz=camera.position.z-b.position.z;
-  const bHoriz=Math.hypot(bdx,bdz);
-  // wraith floats; others stand on the floor
-  const bTargetY=G.floorY+(G.legend.boss.type==="wraith"?0.35:0);
-  b.position.y+=(bTargetY-b.position.y)*Math.min(1,dt*3);
-  if(bHoriz>2.2){const inv=1/(bHoriz||1);b.position.x+=bdx*inv*u.speed*dt;b.position.z+=bdz*inv*u.speed*dt;}
-  if(u.world)syncEntityGPS(b);
+  if(d>2.2){const dir=tmpV.subVectors(camera.position,b.position);dir.y=0;dir.normalize();
+    b.position.addScaledVector(dir,u.speed*dt);}
   u.cd-=dt;
   if(u.cd<=0&&d<7){
     u.combo=COMBOS[Math.min(COMBOS.length-1,Math.floor(Math.random()*(2+u.phase)))].slice();
@@ -2143,10 +1493,8 @@ function animEnemy(e,dt,t){
   const a=e.userData.anim,g=e.userData.animRefs;if(!a)return;
   const ph=e.id*1.7;
   switch(a.kind){
-    case "hover":
-      if(!e.userData||e.userData.state!=="active")
-        e.position.y=(G.floorY||0)+((e.userData&&e.userData.fly)||a.base||0)+Math.sin(t*2.2+ph)*(a.bob||.15);
-      break;
+    case "hover": e.position.y=(e.userData.fly||a.base||0)+Math.sin(t*2.2+ph)*(a.bob||.15);
+      e.rotation.y+=dt*.6;break;
     case "flicker": for(const f of a.flames){const s=.8+Math.random()*.6;f.flame.scale.setScalar(s);
       f.children[1].intensity=.6+Math.random()*.7;} break;
     case "tentacles": g.tents.forEach((tn,i)=>{const w=Math.sin(t*3+i)*0.25;
@@ -2155,8 +1503,7 @@ function animEnemy(e,dt,t){
     case "quadruped": if(g.legs)g.legs.forEach((l,i)=>{l.rotation.x=Math.sin(t*7+i*Math.PI)*.45;});break;
     case "bob": e.position.y=Math.abs(Math.sin(t*5+ph))*.06;break;
     case "winged": g.wings&&g.wings.forEach((w,i)=>{w.rotation.z=(i?-1:1)*Math.sin(t*8+ph)*(a.amp||.5);});
-      if(e.userData&&e.userData.fly&&e.userData.state!=="active") // only hover-bob when idle
-        e.position.y=(G.floorY||0)+e.userData.fly+Math.sin(t*2.5+ph)*(a.bob||.2);
+      if(e.userData.fly)e.position.y=e.userData.fly+Math.sin(t*2.5+ph)*(a.bob||.2);
       if(g.tailSegs)g.tailSegs.forEach((sg,i)=>{sg.position.x=Math.sin(t*2+i*.8)*.06;});break;
     case "slither": g.segs&&g.segs.forEach((sg,i)=>{sg.position.x=Math.sin(t*4-i*.7)*.09;});break;
     case "pulse": {const p=1+Math.sin(t*2.4+ph)*.25;a.orb.scale.setScalar(p);a.glow.intensity=.6+Math.sin(t*2.4+ph)*.45;}break;
@@ -2167,31 +1514,14 @@ function enemyThink(e,dt){
   const u=e.userData,d=e.position.distanceTo(camera.position);
   e.lookAt(camera.position.x,u.fly?camera.position.y:0,camera.position.z);
   animEnemy(e,dt,clock.elapsedTime);
-  if(u.state==="windup"||u.state==="active"&&u._wind){u.cd-=dt;flash(e,0xff7744);
-    if(u.cd<=0){const hd=Math.hypot(camera.position.x-e.position.x,camera.position.z-e.position.z);
-      if(hd<(u.fly?2.6:2.0))hurtPlayer(u.dmg,"slash");u._wind=false;u.cd=rand(1.4,2.6);}return;}
-  // horizontal distance only — vertical gap must never block reaching the player
-  const dx=camera.position.x-e.position.x, dz=camera.position.z-e.position.z;
-  const dHoriz=Math.hypot(dx,dz);
-  const reach=u.fly?2.2:1.5;
-  // settle to the correct height: ground enemies on the floor, flyers hover just above it
-  const baseY=(u.groundY!=null?u.groundY:G.floorY);
-  const targetY=baseY+(u.fly?Math.min(u.fly,0.9):0);
-  e.position.y+=(targetY-e.position.y)*Math.min(1,dt*4);
-  if(dHoriz>reach){
-    const inv=1/(dHoriz||1);
-    e.position.x+=dx*inv*u.speed*1.4*dt;
-    e.position.z+=dz*inv*u.speed*1.4*dt;
-  }
+  if(u.state==="windup"){u.cd-=dt;flash(e,0xff7744);
+    if(u.cd<=0){if(d<(u.fly?2.4:1.9))hurtPlayer(u.dmg,"slash");u.state="approach";u.cd=rand(1.4,2.6);}return;}
+  if(d>1.5){const dir=tmpV.subVectors(camera.position,e.position);
+    if(!u.fly)dir.y=0;else dir.y=(camera.position.y-.2+ (u.fly||0)*.0)-e.position.y; // flyers home softly
+    dir.normalize();e.position.addScaledVector(dir,u.speed*dt);
+    if(u.fly)e.position.y=clamp(e.position.y,.6,2.2);}
   u.cd-=dt;
-  if(u.cd<=0&&dHoriz<reach+0.6){u._wind=true;u.cd=.6;}
-  if(u.world)syncEntityGPS(e);
-}
-function syncEntityGPS(e){
-  // While active, the enemy lives in local combat space and its GPS anchor simply
-  // tracks the player so it never drifts away. (No inverse transform → no runaway.)
-  if(G.lat==null)return;
-  e.userData.lat=G.lat; e.userData.lon=G.lon;
+  if(u.cd<=0&&d<2.4){u.state="windup";u.cd=.7;}
 }
 function flash(g,c){g.traverse(o=>{if(o.material&&o.material.emissive)o.material.emissive.setHex(Math.random()<.5?c:0x000000);});}
 function unflash(g){g.traverse(o=>{if(o.material&&o.material.emissive)o.material.emissive.setHex(0);});}
@@ -2208,48 +1538,22 @@ const FX=[];
    4. COMBAT, DAMAGE, LOOT, ITEMS
    ===================================================================== */
 const ITEM_POOL=[
-  {key:"longsword",slot:"weapon",dmg:12},
-  {key:"axe",slot:"weapon",dmg:16},
-  {key:"mace",slot:"weapon",dmg:14},
-  {key:"bow",slot:"weapon",dmg:10},
-  {key:"spear",slot:"weapon",dmg:13},
-  {key:"potH",slot:"potionH"},
-  {key:"potM",slot:"potionM"},
-  {key:"scrollThunder",slot:"scroll",cost:20,dmg:40},
-  {key:"scrollFrost",slot:"scroll",cost:15,dmg:28},
+  {nm:"Rust-Eaten Longsword",slot:"weapon",dmg:12,ds:"It remembers better hands."},
+  {nm:"Pilgrim's Axe",slot:"weapon",dmg:16,ds:"Heavy. Honest. Slow to forgive."},
+  {nm:"Bell-Bronze Mace",slot:"weapon",dmg:14,ds:"Rings faintly on every strike."},
+  {nm:"Yew Shortbow",slot:"weapon",dmg:10,ds:"Strikes from afar (auto-aims at range)."},
+  {nm:"Hunting Spear",slot:"weapon",dmg:13,ds:"Reach beyond reason."},
+  {nm:"Health Draught",slot:"potionH",ds:"Restores 40 HP. Tastes of iron and thyme."},
+  {nm:"Azure Phial",slot:"potionM",ds:"Restores 30 MP. Hums against the teeth."},
+  {nm:"Scroll of Thunder Echo",slot:"scroll",cost:20,dmg:40,ds:"The Herald's own wrath, borrowed."},
+  {nm:"Scroll of Grave Frost",slot:"scroll",cost:15,dmg:28,ds:"Cold enough to slow regret."},
 ];
-const ITEM_L={
-  en:{
-    longsword:["Rust-Eaten Longsword","It remembers better hands."],
-    axe:["Pilgrim's Axe","Heavy. Honest. Slow to forgive."],
-    mace:["Bell-Bronze Mace","Rings faintly on every strike."],
-    bow:["Yew Shortbow","Strikes from afar (auto-aims at range)."],
-    spear:["Hunting Spear","Reach beyond reason."],
-    potH:["Health Draught","Restores 40 HP. Tastes of iron and thyme."],
-    potM:["Azure Phial","Restores 30 MP. Hums against the teeth."],
-    scrollThunder:["Scroll of Thunder Echo","The Herald's own wrath, borrowed."],
-    scrollFrost:["Scroll of Grave Frost","Cold enough to slow regret."],
-  },
-  es:{
-    longsword:["Espadón Carcomido","Recuerda mejores manos."],
-    axe:["Hacha del Peregrino","Pesada. Honesta. Lenta en perdonar."],
-    mace:["Maza de Bronce de Campana","Resuena leve en cada golpe."],
-    bow:["Arco Corto de Tejo","Hiere de lejos (apunta solo a distancia)."],
-    spear:["Lanza de Caza","Alcance más allá de la razón."],
-    potH:["Brebaje de Salud","Restaura 40 PV. Sabe a hierro y tomillo."],
-    potM:["Vial Azur","Restaura 30 PM. Zumba contra los dientes."],
-    scrollThunder:["Pergamino del Eco del Trueno","La ira del propio Heraldo, prestada."],
-    scrollFrost:["Pergamino de Escarcha Sepulcral","Frío suficiente para frenar el arrepentimiento."],
-  }
-};
-function itemName(it){if(it.slot==="note")return it.nm; const L=ITEM_L[curLang()]||ITEM_L.en;return (it.key&&L[it.key]&&L[it.key][0])||it.nm||it.key;}
-function itemDesc(it){if(it.slot==="note")return it.ds; const L=ITEM_L[curLang()]||ITEM_L.en;return (it.key&&L[it.key]&&L[it.key][1])||it.ds||"";}
-function giveItem(it){G.inv.push({...it,id:Math.random().toString(36).slice(2)});toast((curLang()==="es"?"Obtenido: ":"Obtained: ")+itemName(it));Audio.sfx("loot");renderInv();autosave();}
+function giveItem(it){G.inv.push({...it,id:Math.random().toString(36).slice(2)});toast("Obtained: "+it.nm);Audio.sfx("loot");renderInv();autosave();}
 function lootRoll(kind){
   if(kind==="chest") return choice(ITEM_POOL.filter(i=>i.slot==="weapon"||i.slot==="scroll"));
   if(kind==="skeleton"){
     const note=G.legend.notes&&G.legend.notes[G._noteIdx||0];
-    if(note){G._noteIdx=(G._noteIdx||0)+1;return {nm:(curLang()==="es"?"Nota: ":"Note: ")+note.title,slot:"note",ds:(curLang()==="es"?"Un retazo de la última verdad de alguien.":"A scrap of someone's last truth."),text:note.text};}
+    if(note){G._noteIdx=(G._noteIdx||0)+1;return {nm:"Note: "+note.title,slot:"note",ds:"A scrap of someone's last truth.",text:note.text};}
     return choice(ITEM_POOL);
   }
   return choice(ITEM_POOL.filter(i=>i.slot==="potionH"||i.slot==="potionM"));
@@ -2257,9 +1561,9 @@ function lootRoll(kind){
 function playerAttack(){
   const w=G.equipped.weapon;
   let dmg=(w?w.dmg:6)+G.stats.attack*3;
-  if(Math.random()<G.stats.strike*0.05){dmg=Math.round(dmg*2.2);toast(curLang()==="es"?"¡Crítico!":"Critical!",600);}
+  if(Math.random()<G.stats.strike*0.05){dmg=Math.round(dmg*2.2);toast("Critical!",600);}
   const reach=w&&/bow|spear/i.test(w.nm)?8:2.6;
-  if(G.player.st<12){toast(curLang()==="es"?"Agotado…":"Exhausted…",900);return;}
+  if(G.player.st<12){toast("Exhausted…",900);return;}
   G.player.st-=12;updBars();
   swingFX();
   // hit whatever is in front
@@ -2269,7 +1573,8 @@ function playerAttack(){
     const to=tmpV.subVectors(t.position,camera.position);const d=to.length();
     if(d<reach&&to.normalize().dot(fwd)>.55){damage(t,dmg);hit=true;}
   };
-  for(const e of [...G.world]){ if(e.userData.state==="active"&&e.visible) tryHit(e); }
+  for(const e of [...G.enemies]) tryHit(e);
+  if(G.boss) tryHit(G.boss);
   for(const l of [...G.loots]){
     const to=tmpV.subVectors(l.position,camera.position);
     if(to.length()<2.4&&to.normalize().dot(fwd)>.5) openLoot(l);
@@ -2278,17 +1583,18 @@ function playerAttack(){
 }
 function specialAttack(){
   const s=G.equipped.scroll;
-  if(!s){toast(curLang()==="es"?"Sin pergamino equipado":"No scroll equipped",1200);return;}
-  if(G.player.mp<s.cost){toast(curLang()==="es"?"PM insuficiente":"Not enough MP",1000);return;}
+  if(!s){toast("No scroll equipped",1200);return;}
+  if(G.player.mp<s.cost){toast("Not enough MP",1000);return;}
   G.player.mp-=s.cost;updBars();
   const sdmg=Math.round(s.dmg*(1+G.stats.magic*0.08));
   shockwave(camera.position);
-  for(const e of [...G.world]) if(e.visible&&e.userData.state==="active"&&e.position.distanceTo(camera.position)<7) damage(e,sdmg);
+  for(const e of [...G.enemies]) if(e.position.distanceTo(camera.position)<7) damage(e,sdmg);
+  if(G.boss&&G.boss.position.distanceTo(camera.position)<7) damage(G.boss,sdmg);
 }
 let invuln=0;
 function dodge(){
-  if(G.player.st<20)return toast(curLang()==="es"?"Agotado…":"Exhausted…",800);
-  G.player.st-=20;invuln=.6;updBars();Audio.sfx("dodge");toast(curLang()==="es"?"⟿ esquiva":"⟿ dodge",500);
+  if(G.player.st<20)return toast("Exhausted…",800);
+  G.player.st-=20;invuln=.6;updBars();Audio.sfx("dodge");toast("⟿ dodge",500);
 }
 function damage(t,d){
   const u=t.userData;u.hp-=d;
@@ -2297,21 +1603,11 @@ function damage(t,d){
   if(u.hp<=0){
     if(u.boss){bossDown();}
     else{
-      scene.remove(t);G.world=G.world.filter(x=>x!==t);G.enemies=G.enemies.filter(x=>x!==t);
-<<<<<<< Updated upstream
+      (decorGroup||scene).remove(t);G.enemies=G.enemies.filter(x=>x!==t);
       const sr=t.userData.souls||10;G.player.souls+=sr;toast("Echo absorbed +"+sr);
-=======
-      const sr=t.userData.souls||10;G.player.souls+=sr;toast((curLang()==="es"?"Eco absorbido +":"Echo absorbed +")+sr);
->>>>>>> Stashed changes
       const k=t.userData.kind||"husk";G.kills[k]=(G.kills[k]||0)+1;
       if(Math.random()<.5) giveItem(lootRoll("pot"));
-      // cluster cleared when none of its foes remain
-      const cl=t.userData.cluster;
-      if(cl&&!G.world.some(w=>w.userData.cluster===cl)){
-        cl.cleared=true;cl.clearedAt=Date.now();G._heatDirty=true;
-        G.player.hp=G.player.hpMax;G.player.mp=G.player.mpMax;G.player.st=G.player.stMax;updBars();
-        Audio.sfx("loot");toast(zoneName(cl.biome)+" — "+t("bars_restore"),2200);autosave();
-      }
+      if(!G.enemies.length&&G.encounterActive&&!G.boss) spotCleared();
     }
   }
 }
@@ -2345,24 +1641,23 @@ function updBars(){
 }
 function usePotion(kind){
   const i=G.inv.findIndex(x=>x.slot===kind);
-  if(i<0)return toast(curLang()==="es"?"No quedan":"None left",900);
+  if(i<0)return toast("None left",900);
   G.inv.splice(i,1);
   if(kind==="potionH")G.player.hp+=40;else G.player.mp+=30;
-  updBars();renderInv();Audio.sfx("ui");toast(kind==="potionH"?(curLang()==="es"?"+40 PV":"+40 HP"):(curLang()==="es"?"+30 PM":"+30 MP"),900);autosave();
+  updBars();renderInv();Audio.sfx("ui");toast(kind==="potionH"?"+40 HP":"+30 MP",900);autosave();
 }
 
 /* =====================================================================
    4b. LEVEL UP — exchange souls (echoes) for stats
    ===================================================================== */
-const STAT_L={
-  en:{attack:["Attack","+3 weapon damage per level"],health:["Vitality","+15 max HP per level"],
-    stamina:["Endurance","+12 max stamina per level"],magic:["Arcana","+10 max MP and +8% scroll damage per level"],
-    defense:["Defense","Reduces damage taken (diminishing)"],strike:["Strike","+5% critical chance per level (crits ×2.2)"]},
-  es:{attack:["Ataque","+3 de daño de arma por nivel"],health:["Vitalidad","+15 de PV máx. por nivel"],
-    stamina:["Aguante","+12 de vigor máx. por nivel"],magic:["Arcana","+10 de PM máx. y +8% de daño de pergamino por nivel"],
-    defense:["Defensa","Reduce el daño recibido (decreciente)"],strike:["Golpe","+5% de probabilidad crítica por nivel (críticos ×2.2)"]}
-};
-const STAT_DEFS=[["attack"],["health"],["stamina"],["magic"],["defense"],["strike"]];
+const STAT_DEFS=[
+  ["attack","Attack","+3 weapon damage per level"],
+  ["health","Vitality","+15 max HP per level"],
+  ["stamina","Endurance","+12 max stamina per level"],
+  ["magic","Arcana","+10 max MP and +8% scroll damage per level"],
+  ["defense","Defense","Reduces damage taken (diminishing)"],
+  ["strike","Strike","+5% critical chance per level (crits ×2.2)"],
+];
 function totalLevels(){return Object.values(G.stats).reduce((a,b)=>a+b,0);}
 function levelCost(){return 40+totalLevels()*25;}
 function applyStats(){
@@ -2373,18 +1668,15 @@ function applyStats(){
   updBars();
 }
 function renderLevel(){
-  const es=curLang()==="es";
-  $("soulsBig").textContent="⟡ "+G.player.souls+(es?" ecos · el siguiente nivel cuesta ":" echoes · next level costs ")+levelCost();
+  $("soulsBig").textContent="⟡ "+G.player.souls+" echoes · next level costs "+levelCost();
   const box=$("statRows");box.innerHTML="";
-  const SL=STAT_L[curLang()]||STAT_L.en;
-  for(const [key] of STAT_DEFS){
-    const nm=SL[key][0], desc=SL[key][1];
+  for(const [key,nm,desc] of STAT_DEFS){
     const row=document.createElement("div");row.className="statrow";
     row.innerHTML=`<div class="sn"><b>${nm}</b><span>${desc}</span></div><div class="lv">${G.stats[key]}</div>`;
     const b=document.createElement("button");b.className="btn";b.textContent="+";
     b.onclick=()=>{
       const c=levelCost();
-      if(G.player.souls<c){toast(es?("Ecos insuficientes ("+c+" necesarios)"):("Not enough echoes ("+c+" needed)"),1400);return;}
+      if(G.player.souls<c){toast("Not enough echoes ("+c+" needed)",1400);return;}
       G.player.souls-=c;G.stats[key]++;applyStats();autosave();Audio.sfx("loot");
       renderLevel();
     };
@@ -2477,8 +1769,8 @@ function renderBestiary(){
   }
   const first=seen[0];
   if(first)bestShow(bestSel&&G.kills[bestSel]>0?bestSel:first);
-  else{$("bestName").textContent=t("nothing_slain");$("bestStats").textContent="";
-    $("bestLore").textContent=t("ledger");
+  else{$("bestName").textContent="Nothing slain yet";$("bestStats").textContent="";
+    $("bestLore").textContent="The Herald keeps this ledger. Fill it.";
     if(bestModel){bestScene&&bestScene.remove(bestModel);bestModel=null;}}
 }
 $("btnBestiary").onclick=()=>{$("inv").style.display="none";renderBestiary();show("bestiaryScreen");bestOpen=true;requestAnimationFrame(bestLoop);};
@@ -2488,27 +1780,28 @@ $("btnBestClose").onclick=()=>{bestOpen=false;hide("bestiaryScreen");$("inv").st
    5. QUEST FLOW
    ===================================================================== */
 function startTravel(){
-  log("explore → spot",G.spotIndex);G.phase="travel";
+  log("startTravel → spot",G.spotIndex);G.phase="travel";clearEncounter();
   const s=G.spots[G.spotIndex];
   $("objective").textContent=`${G.spotIndex+1}/${G.spots.length} · seek ${s.fantasyName}`;
   $("spotname").textContent=s.fantasyName;
-  $("hint").textContent=t("explore_hint");
+  $("hint").textContent=G.demo?"Phantom realm: press “I have arrived” to travel":"Walk toward the marker · press “I have arrived” when at the real place";
 }
-function arrive(){}  // legacy no-op; world is persistent now
-/* advance the quest clue when you reach a spot's vicinity on foot */
-function checkSpotProgress(){
-  if(G.phase!=="travel"||G.lat==null)return;
-  const s=G.spots[G.spotIndex];if(!s)return;
-  if(G.spotIndex>=G.spots.length-1)return; // last = boss, handled by bossDown
-  if(haversine(G.lat,G.lon,s.lat,s.lon)<Math.max(Settings.radius,40)){
-    const clue=s.clue;G.spotIndex++;autosave();
-    Dlg.say([clue]);startTravel();
+function arrive(){
+  if(G.encounterActive)return;
+  const s=G.spots[G.spotIndex];
+  if(!G.demo&&G.lat){
+    const d=haversine(G.lat,G.lon,s.lat,s.lon);
+    if(d>Settings.radius){toast(`Still ${Math.round(d)} m away`,1500);return;}
   }
+  const isBoss=G.spotIndex===G.spots.length-1;
+  G.phase=isBoss?"boss":"encounter";
+  Dlg.say(isBoss?["This is the place. I can taste the wrongness of it.","Steel yourself."]:
+    [`${s.fantasyName}. In your world they call it ${s.realName}.`,"Something stands between you and the trail. Cut it down."],
+    ()=>buildEncounter(s,isBoss));
 }
 function spotCleared(){
   const s=G.spots[G.spotIndex];
-  G.player.hp=G.player.hpMax;G.player.mp=G.player.mpMax;G.player.st=G.player.stMax;
-  updBars();Audio.sfx("loot");toast("The zone falls silent — you are restored",2200);
+  G.player.st=G.player.stMax;updBars();
   Dlg.say([s.clue],()=>{
     G.spotIndex++;autosave();
     if(G.spotIndex<G.spots.length) startTravel();
@@ -2518,8 +1811,7 @@ function bossDown(){
   G.player.souls+=120;
   const bk="boss_"+G.legend.boss.type;G.kills[bk]=(G.kills[bk]||0)+1;
   shockwave(G.boss.position);
-  scene.remove(G.boss);G.world=G.world.filter(x=>x!==G.boss);G.boss=null;$("bossbar").style.display="none";
-  clearBossArena();
+  (decorGroup||scene).remove(G.boss);G.boss=null;$("bossbar").style.display="none";
   G.phase="win";autosave();Audio.sfx("boss");
   $("winPanel").innerHTML=`<h3>${G.legend.regionName} — freed</h3>
     <p>${G.legend.boss.name} dissolves into ash and bell-smoke. The Herald flickers, satisfied — or relieved.</p>
@@ -2539,24 +1831,23 @@ $("btnRespawn").onclick=()=>{
    6. INVENTORY UI
    ===================================================================== */
 function renderInv(){
-  const es=curLang()==="es";
-  $("slotline").textContent=`${es?"Arma":"Weapon"}: ${G.equipped.weapon?itemName(G.equipped.weapon):(es?"puños":"fists")} · ${es?"Pergamino":"Scroll"}: ${G.equipped.scroll?itemName(G.equipped.scroll):"—"} · ${es?"Ecos":"Echoes"}: ${G.player.souls} · ${es?"Nv":"Lv"} ${totalLevels()}`;
+  $("slotline").textContent=`Weapon: ${G.equipped.weapon?G.equipped.weapon.nm:"fists"} · Scroll: ${G.equipped.scroll?G.equipped.scroll.nm:"—"} · Echoes: ${G.player.souls} · Lv ${totalLevels()}`;
   const grid=$("invgrid");grid.innerHTML="";
   for(const it of G.inv){
     const div=document.createElement("div");div.className="item";
     if((G.equipped.weapon&&G.equipped.weapon.id===it.id)||(G.equipped.scroll&&G.equipped.scroll.id===it.id))div.classList.add("equipped");
-    div.innerHTML=`<div class="nm">${itemName(it)}</div><div class="ds">${itemDesc(it)}</div>`;
+    div.innerHTML=`<div class="nm">${it.nm}</div><div class="ds">${it.ds||""}</div>`;
     div.onclick=()=>{
-      if(it.slot==="weapon"){G.equipped.weapon=it;toast((curLang()==="es"?"Equipado ":"Equipped ")+itemName(it),900);autosave();}
-      else if(it.slot==="scroll"){G.equipped.scroll=it;toast(curLang()==="es"?"Pergamino listo":"Scroll readied",900);autosave();}
-      else if(it.slot==="note"){$("notePaper").innerHTML=`<h4>${it.nm.replace(/^(Note|Nota): /,"")}</h4><p>${it.text}</p>`;$("inv").style.display="none";show("noteScreen");}
+      if(it.slot==="weapon"){G.equipped.weapon=it;toast("Equipped "+it.nm,900);autosave();}
+      else if(it.slot==="scroll"){G.equipped.scroll=it;toast("Scroll readied",900);autosave();}
+      else if(it.slot==="note"){$("notePaper").innerHTML=`<h4>${it.nm.replace("Note: ","")}</h4><p>${it.text}</p>`;$("inv").style.display="none";show("noteScreen");}
       else if(it.slot==="potionH")usePotion("potionH");
       else if(it.slot==="potionM")usePotion("potionM");
       renderInv();
     };
     grid.appendChild(div);
   }
-  if(!G.inv.length)grid.innerHTML='<div class="ds" style="grid-column:1/-1;text-align:center;color:#6e6786">'+(curLang()==="es"?"Vacío. Rompe vasijas. Abre cofres. Registra a los muertos.":"Empty. Break pots. Open chests. Search the dead.")+'</div>';
+  if(!G.inv.length)grid.innerHTML='<div class="ds" style="grid-column:1/-1;text-align:center;color:#6e6786">Empty. Break pots. Open chests. Search the dead.</div>';
 }
 $("btnInv").onclick=()=>{renderInv();$("inv").style.display="flex";};
 $("btnInvClose").onclick=()=>$("inv").style.display="none";
@@ -2571,27 +1862,18 @@ async function enterXR(){
   try{
     log("requesting immersive-ar…");
     const session=await navigator.xr.requestSession("immersive-ar",{
-      optionalFeatures:["local-floor","hand-tracking","dom-overlay","hit-test"],
+      optionalFeatures:["local-floor","hand-tracking","dom-overlay"],
       domOverlay:{root:document.body}});
     log("session granted · domOverlay:",!!(session.domOverlayState&&session.domOverlayState.type),
         "· blend:",session.environmentBlendMode);
     // prefer floor space, fall back to local (many phones lack local-floor)
     try{ await session.requestReferenceSpace("local-floor");
-         renderer.xr.setReferenceSpaceType("local-floor");G._hasFloorRef=true;log("refSpace: local-floor"); }
-    catch(_){ renderer.xr.setReferenceSpaceType("local");G._hasFloorRef=false;log("refSpace: local"); }
+         renderer.xr.setReferenceSpaceType("local-floor");log("refSpace: local-floor"); }
+    catch(_){ renderer.xr.setReferenceSpaceType("local");camera.position.set(0,0,0);log("refSpace: local"); }
     await renderer.xr.setSession(session);
     session.addEventListener("visibilitychange",()=>log("xr visibility:",session.visibilityState));
     G.xr=true;
     const v=$("camFeed");if(v.srcObject){v.srcObject.getTracks().forEach(t=>t.stop());v.srcObject=null;}v.style.display="none";
-    // hit-test: ray straight ahead from the viewer to find real surfaces (floors)
-    G.hitSource=null;G.hitFloorY=null;G.hitReady=false;
-    try{
-      const viewerSpace=await session.requestReferenceSpace("viewer");
-      if(session.requestHitTestSource){
-        G.hitSource=await session.requestHitTestSource({space:viewerSpace});
-        G.hitReady=true;log("hit-test source ready");
-      }else log("hit-test API not present on session");
-    }catch(err){log("hit-test unavailable:",err.message||err);}
     for(let i=0;i<2;i++){
       const h=renderer.xr.getHand(i);scene.add(h);xrHands.push(h);
     }
@@ -2600,7 +1882,7 @@ async function enterXR(){
       const c=renderer.xr.getController(i);
       c.addEventListener("select",playerAttack);scene.add(c);
     }
-    session.addEventListener("end",()=>{log("xr session ended");G.xr=false;G.hitSource=null;G.hitReady=false;startCamFeed();});
+    session.addEventListener("end",()=>{log("xr session ended");G.xr=false;startCamFeed();});
     beginGame();
   }catch(e){log("AR session failed:",e.message||e);toast("AR session failed — camera mode");enterFlat();}
 }
@@ -2664,45 +1946,11 @@ function handSwing(dt){
    ===================================================================== */
 function watchGPS(){
   if(!navigator.geolocation)return;
-  // raw target fix; G.lat/G.lon are smoothed toward it each frame in smoothGPS()
-  G._gpsTarget=null;G._gpsSpeed=0;G._gpsCourse=null;G._lastFixT=0;
   navigator.geolocation.watchPosition(p=>{
-    G._gpsTarget={lat:p.coords.latitude,lon:p.coords.longitude};
-    G._gpsSpeed=p.coords.speed||0;                 // m/s
-    if(p.coords.heading!=null&&(p.coords.speed||0)>0.6)G._gpsCourse=p.coords.heading;
-    G._lastFixT=performance.now();
-    if(G.lat==null){G.lat=p.coords.latitude;G.lon=p.coords.longitude;} // first fix snaps
+    G.lat=p.coords.latitude;G.lon=p.coords.longitude;
+    if(p.coords.heading!=null&&p.coords.speed>0.5)G.heading=p.coords.heading;
   },e=>{if(e.code===1&&!G._gpsWarned){G._gpsWarned=true;toast("Location permission lost — re-enable it in Chrome site settings",4000);}},
-  {enableHighAccuracy:true,maximumAge:0});          // freshest possible fixes
-}
-function smoothGPS(dt){
-  if(!G._gpsTarget||G.lat==null)return;
-  // ease toward the latest fix continuously (feels like 60fps tracking)
-  const k=1-Math.pow(0.0001,dt);                    // fast critically-damped-ish follow
-  G.lat+=(G._gpsTarget.lat-G.lat)*k;
-  G.lon+=(G._gpsTarget.lon-G.lon)*k;
-  // dead-reckoning between fixes: if moving, extrapolate along course so motion stays fluid
-  if(G._gpsSpeed>0.5&&G._gpsCourse!=null){
-    const {mlat,mlon}=metersPerDeg(G.lat);
-    const adv=G._gpsSpeed*dt;                        // metres this frame
-    G.lat+=Math.cos(G._gpsCourse*Math.PI/180)*adv/mlat*0.5;
-    G.lon+=Math.sin(G._gpsCourse*Math.PI/180)*adv/mlon*0.5;
-  }
-}
-function checkAmbient(){ return; // disabled: persistent world replaces ambient spawns
-  if(G.phase!=="travel"||G.encounterActive||G.lat==null)return;
-  const cl=nearestCluster(G.lat,G.lon);          // within ~cell/70m of a live pack
-  if(!cl)return;
-  if(G._ambientCooldown&&Date.now()<G._ambientCooldown)return;
-  // start a roaming encounter using this cluster, themed to its biome
-  G.phase="encounter";
-  const tier=cl.heat>=.66?"a red swarm":cl.heat>=.33?"a yellow pack":"a green few";
-  Dlg.say([zoneName(cl.biome)+" stirs — "+tier+" closes in."],()=>{
-    G._activeCluster=cl;G._ambient=true;
-    buildEncounter({decor:({water:"graveyard",beach:"graveyard",forest:"grove",mountain:"battlefield",
-      park:"grove",grave:"graveyard",ruins:"ruins",urban:"ruins"})[cl.biome]||"ruins",
-      fantasyName:zoneName(cl.biome),realName:zoneName(cl.biome),enemy:cl.biome},false);
-  });
+  {enableHighAccuracy:true,maximumAge:2000});
 }
 function updCompass(){
   const s=G.spots[G.spotIndex];if(!s)return;
@@ -2748,75 +1996,47 @@ function drawMinimap(){
   if(G.lat==null&&!G.demo)return;
   const refLat=G.lat??(G.spots[0]?G.spots[0].lat:0), refLon=G.lon??(G.spots[0]?G.spots[0].lon:0);
   const s=G.spots[G.spotIndex];
-  // include nearest live cluster in framing so packs are visible even before a spot is chosen
-  const nc=HEAT.clusters.find(c=>!c.cleared);
-  const dNext=s?haversine(refLat,refLon,s.lat,s.lon):(nc?haversine(refLat,refLon,nc.lat,nc.lon):200);
-  const range=clamp(Math.max(dNext,nc?haversine(refLat,refLon,nc.lat,nc.lon):0)/0.8,150,4000); mmZoom=R/range;
-  const headDeg=(G.heading||0);
+  const dNext=s?haversine(refLat,refLon,s.lat,s.lon):100;
+  // view range: at least 120 m, at most enough to show next spot at 80% radius
+  const range=clamp(dNext/0.8,120,4000); mmZoom=R/range;
+  const head=(G.heading||0)*Math.PI/180;
   mm.save();
   mm.beginPath();mm.arc(R,R,R-3,0,Math.PI*2);mm.clip();
+  // bg rings
   mm.fillStyle="rgba(8,7,14,.0)";mm.fillRect(0,0,W,W);
   mm.strokeStyle="rgba(110,92,196,.3)";mm.lineWidth=1;
   for(const f of[.33,.66,1]){mm.beginPath();mm.arc(R,R,(R-3)*f,0,Math.PI*2);mm.stroke();}
-  // Direct heading-relative projection (no canvas rotation → no sign ambiguity).
-  // A point at compass bearing θ and distance d appears at screen-angle (θ - heading)
-  // measured clockwise from straight up. Turning right (heading↑) rotates world left. ✓
-  const P=(lat,lon)=>{
-    const d=haversine(refLat,refLon,lat,lon);
-    if(d<0.5)return [R,R];
-    const rel=(bearing(refLat,refLon,lat,lon)-headDeg)*Math.PI/180;
-    const r=d*mmZoom;
-    return [R+Math.sin(rel)*r, R-Math.cos(rel)*r];
-  };
-  // heat cells
-  if(HEAT.grid.length){
-    for(let rr=0;rr<HEAT.rows;rr++)for(let cc=0;cc<HEAT.cols;cc++){
-      const cell=HEAT.grid[rr][cc];if(cell.heat<0.12)continue;
-      const [clat,clon]=cellCenterLatLon(rr,cc);
-      const[x,y]=P(clat,clon);const half=HEAT.cell*mmZoom/2;
-      mm.fillStyle=heatColor(cell.heat);mm.globalAlpha=0.10+cell.heat*0.3;
-      mm.fillRect(x-half,y-half,half*2,half*2);mm.globalAlpha=1;
-    }
-    for(const cl of HEAT.clusters){if(cl.cleared)continue;
-      const[x,y]=P(cl.lat,cl.lon);
-      mm.fillStyle=heatColor(cl.heat);mm.beginPath();
-      mm.arc(x,y,2+Math.min(cl.count,6)*.6,0,Math.PI*2);mm.fill();}
-  }
+  mm.translate(R,R);mm.rotate(head); // rotate world opposite of heading → up = facing dir
+  const P=(lat,lon)=>{const[e,n]=toLocal(lat,lon,refLat,refLon);return[e*mmZoom,-n*mmZoom];};
   // path
   if(G.route.length>1){
     mm.beginPath();
     G.route.forEach((p,i)=>{const[x,y]=P(p[0],p[1]);i?mm.lineTo(x,y):mm.moveTo(x,y);});
     mm.strokeStyle="rgba(232,179,58,.85)";mm.lineWidth=3;mm.setLineDash([7,5]);mm.stroke();mm.setLineDash([]);
   }
-  // live world enemies as red/orange dots so you can see foes around you
-  if(G.world&&G.world.length){
-    for(const e of G.world){if(!e.userData||e.userData.hp<=0)continue;
-      const[x,y]=P(e.userData.lat,e.userData.lon);
-      mm.fillStyle=e.userData.boss?"#ff3322":"#e86a3a";
-      mm.beginPath();mm.arc(x,y,e.userData.boss?4:2.5,0,Math.PI*2);mm.fill();}
-  }
   // spots
   G.spots.forEach((sp,i)=>{
     const[x,y]=P(sp.lat,sp.lon);
     mm.beginPath();mm.arc(x,y,i===G.spots.length-1?6:4.5,0,Math.PI*2);
-    mm.fillStyle=i<G.spotIndex?"#4a4458":i===G.spotIndex?"#ffe9a8":"#6e5cc4";mm.fill();
+    mm.fillStyle=i<G.spotIndex?"#4a4458":i===G.spotIndex?"#ffe9a8":"#6e5cc4";
+    mm.fill();
     if(i===G.spotIndex){mm.strokeStyle="#e8b33a";mm.lineWidth=2;mm.beginPath();mm.arc(x,y,9,0,Math.PI*2);mm.stroke();}
   });
   mm.restore();
-  // player marker (center, pointing up = the way you face)
+  // player marker (always center, pointing up)
   mm.save();mm.translate(R,R);
   mm.fillStyle="#fff4c8";mm.beginPath();mm.moveTo(0,-9);mm.lineTo(6,7);mm.lineTo(0,3);mm.lineTo(-6,7);mm.closePath();mm.fill();
   mm.restore();
-  // North tick: north sits at screen-angle (-heading) from up
-  {const relN=(-headDeg)*Math.PI/180;
-   mm.fillStyle="#9c2f2f";mm.font="11px Georgia";mm.textAlign="center";
-   mm.fillText("N",R+Math.sin(relN)*(R-14),R-Math.cos(relN)*(R-14)+4);}
+  // north tick
+  mm.save();mm.translate(R,R);mm.rotate(head);
+  mm.fillStyle="#9c2f2f";mm.font="11px Georgia";mm.textAlign="center";mm.fillText("N",0,-R+14);
+  mm.restore();
   // off-screen pointer to next spot
   if(s){
-    const d=haversine(refLat,refLon,s.lat,s.lon);
-    if(d*mmZoom>R-12){
-      const rel=(bearing(refLat,refLon,s.lat,s.lon)-headDeg)*Math.PI/180;
-      mm.save();mm.translate(R+Math.sin(rel)*(R-10),R-Math.cos(rel)*(R-10));mm.rotate(rel);
+    const[e,n]=toLocal(s.lat,s.lon,refLat,refLon);
+    if(Math.hypot(e,n)*mmZoom>R-12){
+      let a=Math.atan2(e,n)+head; // screen angle
+      mm.save();mm.translate(R+Math.sin(a)*(R-10),R-Math.cos(a)*(R-10));mm.rotate(a);
       mm.fillStyle="#e8b33a";mm.beginPath();mm.moveTo(0,-7);mm.lineTo(5,5);mm.lineTo(-5,5);mm.closePath();mm.fill();
       mm.restore();
     }
@@ -2834,24 +2054,6 @@ function openMap(){
       attribution:"© OpenStreetMap"}).addTo(leaf);
     leafYou=L.circleMarker([refLat,refLon],{radius:8,color:"#ffe9a8",fillColor:"#e8b33a",fillOpacity:.9}).addTo(leaf)
       .bindTooltip("You");
-  }
-  // heatmap overlay (rebuild each open)
-  if(leaf._heatLayer){leaf.removeLayer(leaf._heatLayer);}
-  leaf._heatLayer=L.layerGroup().addTo(leaf);
-  if(HEAT.grid.length){
-    for(let r=0;r<HEAT.rows;r++)for(let c=0;c<HEAT.cols;c++){
-      const cell=HEAT.grid[r][c];if(cell.heat<0.08)continue;
-      const sLat=HEAT.lat0+r/HEAT.rows*HEAT.latSpan, nLat=HEAT.lat0+(r+1)/HEAT.rows*HEAT.latSpan;
-      const wLon=HEAT.lon0+c/HEAT.cols*HEAT.lonSpan, eLon=HEAT.lon0+(c+1)/HEAT.cols*HEAT.lonSpan;
-      L.rectangle([[sLat,wLon],[nLat,eLon]],{stroke:false,
-        fillColor:heatColor(cell.heat),fillOpacity:0.12+cell.heat*0.4}).addTo(leaf._heatLayer);
-    }
-    for(const cl of HEAT.clusters){
-      L.circleMarker([cl.lat,cl.lon],{radius:4+cl.count,color:heatColor(cl.heat),
-        fillColor:heatColor(cl.heat),fillOpacity:cl.cleared?0.15:0.7,weight:1})
-        .addTo(leaf._heatLayer)
-        .bindTooltip(`${cl.cleared?"(cleared) ":""}${cl.count} foes · ${zoneName(cl.biome)}`);
-    }
   }
   // rebuild route + markers each open (progress changes colors)
   if(leafRoute){leaf.removeLayer(leafRoute);}
@@ -2871,9 +2073,8 @@ function openMap(){
   setTimeout(()=>leaf.invalidateSize(),60);
   const s=G.spots[G.spotIndex];
   const d=s?haversine(refLat,refLon,s.lat,s.lon):0;
-  const live=HEAT.clusters.filter(c=>!c.cleared).length;
-  $("mapInfo").innerHTML=(s?`Next: ${s.fantasyName} (${d>999?(d/1000).toFixed(1)+" km":Math.round(d)+" m"}) · `:"")+
-    `<span style="color:#9c2f2f">red</span>/<span style="color:#e8b33a">yellow</span>/<span style="color:#3aa860">green</span> = foe density · ${live} packs roaming`;
+  $("mapInfo").textContent=(G.routeMeta?`Full road: ${(G.routeMeta.dist/1000).toFixed(1)} km · ~${Math.round(G.routeMeta.dur/60)} min on foot · `:"")+
+    (s?`Next: ${s.fantasyName} (${d>999?(d/1000).toFixed(1)+" km":Math.round(d)+" m"})`:"");
 }
 $("btnMap").onclick=()=>{Audio.sfx("ui");openMap();};
 $("btnMapClose").onclick=()=>{$("mapScreen").style.display="none";};
@@ -2882,9 +2083,8 @@ $("btnMapClose").onclick=()=>{$("mapScreen").style.display="none";};
    9. MAIN LOOP
    ===================================================================== */
 let compassT=0,loopErrOnce=false;
-function loop(time,xrFrame){
+function loop(){
  try{
-  sampleHitTest(xrFrame);
   const dt=Math.min(clock.getDelta(),.1),t=clock.elapsedTime;
   updateHerald(dt,t);
   invuln=Math.max(0,invuln-dt);
@@ -2893,14 +2093,12 @@ function loop(time,xrFrame){
     G.player.st=clamp(G.player.st+dt*(24+24*f),0,G.player.stMax);
   }
   if((compassT+=dt)>0.5){compassT=0;updCompass();updBars();
-    refreshRespawns(G.lat,G.lon);
-    checkSpotProgress();
-    if($("mapScreen").style.display==="flex"){
-      if(leafYou&&G.lat!=null)leafYou.setLatLng([G.lat,G.lon]);
-      if(G._heatDirty){G._heatDirty=false;openMap();} // re-render heat layer on change
-    }}
+    if($("mapScreen").style.display==="flex"&&leafYou&&G.lat!=null)leafYou.setLatLng([G.lat,G.lon]);}
   if(G.phase!=="title")drawMinimap();
-  if(!G._paused){smoothGPS(dt);updateWorld(dt);}
+  if(G.encounterActive){
+    for(const e of G.enemies) enemyThink(e,dt);
+    if(G.boss) bossThink(G.boss,dt);
+  }
   for(let i=FX.length-1;i>=0;i--) if(FX[i].upd(dt)) FX.splice(i,1);
   for(let i=MIXERS.length-1;i>=0;i--){
     const mx=MIXERS[i],r=mx.getRoot();
@@ -2919,35 +2117,22 @@ function loop(time,xrFrame){
    10. BOOT SEQUENCE
    ===================================================================== */
 async function boot(demo){
-  log("boot, demo =",demo);G.demo=demo;newSlot();
-  if(demo&&G.lat==null){G.lat=41.3851;G.lon=2.1734;G.heading=0;log("demo origin set");}hide("titleScreen");show("loadScreen");
+  log("boot, demo =",demo);G.demo=demo;newSlot();hide("titleScreen");show("loadScreen");
   let pois=[],env="town";
   if(!demo){
     try{
-      $("loadingTxt").textContent=(Settings.lang==="es"?"Localizando tu reino… (permite la Ubicación)":"Locating your realm… (allow Location when asked)");
+      $("loadingTxt").textContent="Locating your realm… (allow Location when asked)";
       initHeading();
       const pos=await locate();log("GPS fix:",pos.lat.toFixed(5),pos.lon.toFixed(5));G.lat=pos.lat;G.lon=pos.lon;watchGPS();
-      $("loadingTxt").textContent=(curLang()==="es"?"Desenterrando lugares de poder…":"Unearthing places of power…");
+      $("loadingTxt").textContent="Unearthing places of power…";
       pois=await fetchPOIs(pos.lat,pos.lon,Settings.poi);env=envType(pois);log("POIs:",pois.length,"env:",env);
-      $("loadingTxt").textContent=(Settings.lang==="es"?"Leyendo el terreno…":"Reading the lay of the land…");
-      let feats=[];
-      try{ feats=await fetchBiomeFeatures(pos.lat,pos.lon,Settings.poi); }catch(e){log("biome fetch threw:",e.message||e);}
-      log("biome features:",feats.length);
-      buildHeatmap(feats,pos.lat,pos.lon,Settings.poi);
-      if(!HEAT.clusters.length)seedSyntheticHeat(pos.lat,pos.lon,Settings.poi);
-      G.heatCenter={lat:pos.lat,lon:pos.lon,radius:Settings.poi};
-      log("FINAL clusters:",HEAT.clusters.length);
     }catch(e){
       toast((typeof e==="string"?e:(e&&e.message)||"GPS/POI failed")+" — phantom realm instead",5000);
       G.demo=true;
     }
   }
   G.env=env;
-  if(!HEAT.clusters.length){ // demo / no-features fallback
-    seedSyntheticHeat(G.lat,G.lon,Settings.poi);
-    G.heatCenter={lat:G.lat,lon:G.lon,radius:Settings.poi};
-  }
-  $("loadingTxt").textContent=(Settings.lang==="es"?"El Heraldo teje tu leyenda…":"The Herald weaves your legend…");
+  $("loadingTxt").textContent="The Herald weaves your legend…";
   const fb=fallbackLegend(pois,env);
   try{
     const ai=await weaveLegend(pois,env,null);
@@ -2962,7 +2147,7 @@ async function boot(demo){
   });
   fetchRoute(); // walking path through all spots (async, fallback = straight legs)
   // preload 3D models so they appear instantly instead of swapping mid-fight
-  $("loadingTxt").textContent=(Settings.lang==="es"?"Invocando el bestiario…":"Summoning the bestiary…");
+  $("loadingTxt").textContent="Summoning the bestiary…";
   show("loadScreen");
   await preloadModels((d,n,k)=>{$("loadingTxt").textContent=`Summoning the bestiary… ${d}/${n}`;});
   hide("loadScreen");
@@ -2972,21 +2157,21 @@ async function boot(demo){
   // tutorial gear screen — AI-determined for this environment
   hide("loadScreen");
   const g=G.legend.gear;
-  $("gearPanel").innerHTML=`<h3>${t("gear_before")} ${G.legend.regionName}</h3>
-    <p>${t("gear_judged")} (${env}):</p>
-    <div class="gearcat">${t("gear_clothing")}</div><ul>${g.clothing.map(x=>`<li>${x}</li>`).join("")}</ul>
-    <div class="gearcat">${t("gear_carry")}</div><ul>${g.objects.map(x=>`<li>${x}</li>`).join("")}</ul>
-    <div class="gearcat">${t("gear_transport")}</div><ul>${g.transport.map(x=>`<li>${x}</li>`).join("")}</ul>
-    <p style="margin-top:12px;font-size:12px;color:#8d86a5">${t("gear_safety")}</p>`;
+  $("gearPanel").innerHTML=`<h3>Before you walk — ${G.legend.regionName}</h3>
+    <p>The Herald has judged the land between your waypoints (${env}). Gather these in the real world first:</p>
+    <div class="gearcat">Clothing</div><ul>${g.clothing.map(x=>`<li>${x}</li>`).join("")}</ul>
+    <div class="gearcat">Carry</div><ul>${g.objects.map(x=>`<li>${x}</li>`).join("")}</ul>
+    <div class="gearcat">Travel between spots</div><ul>${g.transport.map(x=>`<li>${x}</li>`).join("")}</ul>
+    <p style="margin-top:12px;font-size:12px;color:#8d86a5">Stay aware of traffic and people around you. The realm is layered over the real world — the real world always wins.</p>`;
   show("gearScreen");
 }
 $("btnGearDone").onclick=()=>{
   hide("gearScreen");
   // quest map
-  $("questPanel").innerHTML=`<h3>${t("road_through")} ${G.legend.regionName}</h3>
+  $("questPanel").innerHTML=`<h3>The road through ${G.legend.regionName}</h3>
     <ul class="spotlist">${G.spots.map((s,i)=>{
       const dist=(G.lat!=null&&!G.demo)?Math.round(haversine(G.lat,G.lon,s.lat,s.lon))+" m away":"phantom";
-      return `<li><b>${i+1}. ${s.fantasyName}</b> — ${s.realName}<span>${s.decor} · ${dist}${i===G.spots.length-1?" · "+t("echo_here"):""}</span></li>`;}).join("")}
+      return `<li><b>${i+1}. ${s.fantasyName}</b> — ${s.realName}<span>${s.decor} · ${dist}${i===G.spots.length-1?" · THE ECHO WAITS HERE":""}</span></li>`;}).join("")}
     </ul>`;
   show("questScreen");
 };
@@ -3000,7 +2185,6 @@ $("btnEnterFlat").onclick=()=>{hide("questScreen");enterFlat();};
 })();
 function beginGame(){
   log("beginGame · xr:",G.xr,"· intro lines:",G.legend.intro.length);applySettings();Audio.startMusic();
-  buildWorld();
   $("hud").style.display="block";updBars();
   Dlg.say(G.legend.intro,()=>startTravel());
 }
@@ -3010,18 +2194,11 @@ $("btnContinue").onclick=()=>{renderSlots();show("savesScreen");};
 $("btnSavesClose").onclick=()=>hide("savesScreen");
 /* ---- settings UI ---- */
 const SBIND=[["setBright","bright","vBright",v=>v+"%"],["setMusic","music","vMusic",v=>v+"%"],
-  ["setSfx","sfx","vSfx",v=>v+"%"],["setText","textSpeed","vText",v=>(Settings.lang==="es"?["lento","normal","rápido"]:["slow","normal","fast"])[v-1]],
+  ["setSfx","sfx","vSfx",v=>v+"%"],["setText","textSpeed","vText",v=>["slow","normal","fast"][v-1]],
   ["setRadius","radius","vRadius",v=>v+" m"],["setSwing","swing","vSwing",v=>v+" m/s"],["setPoi","poi","vPoi",v=>v+" m"]];
 function openSettings(){
-  $("setLang").value=Settings.lang||"en";
-  $("setLang").onchange=()=>{Settings.lang=$("setLang").value;applyLang();
-    // refresh dynamic slider labels in the new language
-    for(const [id,key,lab,fmt] of SBIND)$(lab).textContent=fmt($(id).value);};
   $("setApiKey").value=Settings.apiKey;
   $("setModelBase").value=Settings.modelBase;
-  $("setMusicUrl").value=Settings.musicUrl||BGM_URL;
-  $("setEye").value=Settings.eyeHeight||150;$("vEye").textContent=(Settings.eyeHeight||150)+" cm";
-  $("setEye").oninput=()=>{$("vEye").textContent=$("setEye").value+" cm";G.eyeHeight=(+$("setEye").value)/100;};
   for(const [id,key,lab,fmt] of SBIND){const el=$(id);el.value=Settings[key];$(lab).textContent=fmt(el.value);
     el.oninput=()=>{$(lab).textContent=fmt(el.value);
       if(key==="bright"){Settings.bright=+el.value;applySettings();}
@@ -3038,22 +2215,15 @@ $("btnAutoBase").onclick=()=>{
   ModelCache.cache={};ModelCache.missing={};
   toast("Set to "+abs,3000);};
 $("btnSettingsClose").onclick=()=>{Object.assign(Settings,Store.get("eotr_settings",DEFAULTS));applySettings();hide("settingsScreen");};
-$("btnMusicAuto").onclick=()=>{
-  const u=location.href.replace(/[?#].*$/,"").replace(/[^/]*$/,"")+"deuslower-medieval-ambient-236809.mp3";
-  $("setMusicUrl").value=u;toast("Set to "+u,3500);};
 $("btnSettingsSave").onclick=()=>{
   Settings.apiKey=$("setApiKey").value.trim();
-  {const mu=$("setMusicUrl").value.trim();
-   if(mu&&mu!==Settings.musicUrl){Settings.musicUrl=mu;const el=$("bgm");if(el){el.src=mu;el.load();el.play().catch(()=>{});}}}
   const nb=$("setModelBase").value.trim()||"models/";
   if(nb!==Settings.modelBase){ModelCache.cache={};ModelCache.missing={};}
   Settings.modelBase=nb;
-  Settings.eyeHeight=+$("setEye").value;G.eyeHeight=Settings.eyeHeight/100;
-  Settings.lang=$("setLang").value;applyLang();
   for(const [id,key] of SBIND)Settings[key]=+$(id).value;
   saveSettings();Audio.sfx("ui");toast("Settings saved");hide("settingsScreen");
 };
-updContinueBtn();applySettings();applyLang();
+updContinueBtn();applySettings();
 
 /* combat buttons */
 $("btnAtk").onclick=playerAttack;
@@ -3061,37 +2231,7 @@ $("btnSpecial").onclick=specialAttack;
 $("btnDodge").onclick=dodge;
 $("btnPotH").onclick=()=>usePotion("potionH");
 $("btnPotM").onclick=()=>usePotion("potionM");
-$("btnArrive").onclick=()=>{
-  Audio.sfx("ui");
-  for(const e of G.world)if(e.userData.state!=="active"){
-    e.userData.lat=e.userData.homeLat;e.userData.lon=e.userData.homeLon;}
-  toast(t("world_recentered"),1200);
-};
-/* virtual locomotion for demo / testing without real movement: step toward nearest target */
-let _walkHold=null;
-function walkStep(){
-  if(G.lat==null)return;
-  G._gpsTarget=G._gpsTarget||{lat:G.lat,lon:G.lon}; // ensure smoothing has a target in demo
-  // target: nearest live enemy, else next quest spot
-  let tgt=null,bd=1e9;
-  for(const e of G.world){if(!e.userData||e.userData.hp<=0)continue;
-    const d=haversine(G.lat,G.lon,e.userData.lat,e.userData.lon);if(d<bd){bd=d;tgt=e.userData;}}
-  const sp=G.spots[G.spotIndex];
-  if((!tgt||bd>VISIBLE_R)&&sp)tgt={lat:sp.lat,lon:sp.lon};
-  if(!tgt)return;
-  const br=bearing(G.lat,G.lon,tgt.lat,tgt.lon);
-  G.heading=br;                          // face the way we walk
-  const step=6;                          // metres per tick
-  const {mlat,mlon}=metersPerDeg(G.lat);
-  G.lat+=Math.cos(br*Math.PI/180)*step/mlat;
-  G.lon+=Math.sin(br*Math.PI/180)*step/mlon;
-  G._gpsTarget={lat:G.lat,lon:G.lon};   // keep smoother in sync (no fighting in demo)
-}
-const _wb=$("btnWalk");
-_wb.addEventListener("pointerdown",e=>{e.preventDefault();walkStep();_walkHold=setInterval(walkStep,420);});
-const stopWalk=()=>{if(_walkHold){clearInterval(_walkHold);_walkHold=null;}};
-_wb.addEventListener("pointerup",stopWalk);_wb.addEventListener("pointerleave",stopWalk);
-addEventListener("pointerup",stopWalk);
+$("btnArrive").onclick=arrive;
 $("btnNewQuest").onclick=()=>location.reload();
 /* tap on canvas = attack/interact in flat mode */
 $("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();});
