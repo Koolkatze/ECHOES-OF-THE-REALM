@@ -2091,6 +2091,8 @@ function updateWorld(dt){
   if(G.lat==null){ // no GPS yet (e.g. demo pre-origin): keep hidden
     for(const e of G.world)e.visible=false;return;
   }
+  if(G._worldGrace===undefined)G._worldGrace=performance.now()+3000; // settle GPS before any pursuit
+  const inGrace=performance.now()<G._worldGrace;
   G.floorY=currentFloorY();
   const {mlat,mlon}=metersPerDeg(G.lat);
   const head=(G.heading||0)*Math.PI/180;
@@ -2103,9 +2105,17 @@ function updateWorld(dt){
     e.visible=true;
     // Render distance: 1:1 within 25 m, gently compressed beyond so distant foes stay on-screen
     // but walking ALWAYS closes the gap (monotonic, never clamps you out).
-    const renderDist=dist<=25?dist:25+(dist-25)*0.35;
-    const k=renderDist/Math.max(dist,0.001);
-    const localE=dE*k, localN=dN*k;
+    // compress far distances, but also FLOOR the near distance so nothing renders on top of you
+    const MIN_DIST=4.5;                         // metres: closest an enemy is ever drawn
+    let renderDist=dist<=25?dist:25+(dist-25)*0.35;
+    renderDist=Math.max(renderDist, MIN_DIST);
+    let bN=dN, bE=dE, bLen=dist;
+    if(bLen<0.5){ // GPS put it basically on you → give it a stable bearing so it's not at origin
+      if(u.bearing===undefined)u.bearing=Math.random()*Math.PI*2;
+      bN=Math.cos(u.bearing); bE=Math.sin(u.bearing); bLen=1;
+    }
+    const k=renderDist/Math.max(bLen,0.001);
+    const localE=bE*k, localN=bN*k;
     // heading is clockwise-from-north. Bearing east = +x, north = -z (forward).
     const x= localE*Math.cos(head)-localN*Math.sin(head);
     const z=-(localN*Math.cos(head)+localE*Math.sin(head));
@@ -2115,20 +2125,23 @@ function updateWorld(dt){
       u.state="idle"; u._wind=false;
       if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}
     }
-    // engage when you come within pursuit range (visual sight), unless you're veiled
-    if(!G.invisible && u.state!=="active" && u.state!=="dead" && renderDist<PURSUE_R){
+    // engage when within pursuit range — but not during the spawn grace, and not veiled
+    if(!inGrace && !G.invisible && u.state!=="active" && u.state!=="dead" && renderDist<PURSUE_R){
       u.state="active";
-      // seed at a VISIBLE distance: keep its current bearing, but push it out to at least
-      // a spawn distance so it never starts on top of you (GPS can place it at ~0 m).
+      // seed at a VISIBLE distance, SPREAD by a per-enemy bearing offset so a whole pack
+      // doesn't stack on the same point in front of you.
       let sdx=tx-camera.position.x, sdz=tz-camera.position.z;
       let sd=Math.hypot(sdx,sdz);
-      const SEED=Math.max(6, FIGHT_DIST+2);    // start ~6 m away, then it walks in
-      if(sd<0.001){ // exactly on top → pick a bearing in front of the camera
+      if(sd<0.001){
         const fx=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
         sdx=fx.x; sdz=fx.z; sd=Math.hypot(sdx,sdz)||1;
       }
-      const sf=Math.max(SEED, sd)/sd;          // never pull closer than SEED
-      e.position.set(camera.position.x+sdx*sf, currentFloorY()+(u.fly?u.fly:0), camera.position.z+sdz*sf);
+      // rotate this enemy's seed bearing by a stable per-entity angle so they fan out
+      if(u.spread===undefined)u.spread=(Math.random()*2-1)*0.9; // ±0.9 rad
+      const ca=Math.cos(u.spread), sa=Math.sin(u.spread);
+      let bx=(sdx*ca - sdz*sa)/sd, bz=(sdx*sa + sdz*ca)/sd;
+      const SEED=Math.max(6, FIGHT_DIST+2) + Math.random()*2; // 6–8 m, varied
+      e.position.set(camera.position.x+bx*SEED, currentFloorY()+(u.fly?u.fly:0), camera.position.z+bz*SEED);
       if(u.boss&&!u.introDone)bossIntro(e);
     }
     // disengage only if you walk far beyond pursuit range
