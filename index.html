@@ -2025,7 +2025,9 @@ function sampleHitTest(xrFrame){
   }catch(e){/* frame without hit-test, ignore */}
 }
 G.worldBuilt=false;
-const ENGAGE_R=20;      // rendered-metres: close enough to attack
+const ENGAGE_R=20;      // rendered-metres: enemy notices & turns aggressive
+const FIGHT_DIST=3.4;   // metres: where a melee enemy STOPS to fight (so you can see it)
+const HIT_REACH=4.2;    // metres: how close it must be to land a blow (a bit > FIGHT_DIST)
 const PURSUE_R=70;      // rendered-metres: enemy spots you and gives chase
 const VISIBLE_R=80;     // metres: enemy mesh is in the scene at all
 G.invisible=false;      // Veil spell active → enemies cannot see you
@@ -2115,14 +2117,9 @@ function updateWorld(dt){
     // engage when you come within pursuit range (visual sight), unless you're veiled
     if(!G.invisible && u.state!=="active" && u.state!=="dead" && renderDist<PURSUE_R){
       u.state="active";
-      const fl=currentFloorY();
-      u.groundY=fl;
-      if(renderDist<ENGAGE_R){ // pop close ones right in front; distant ones keep their spot and run in
-        const fx=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);fx.y=0;fx.normalize();
-        e.position.set(camera.position.x+fx.x*Math.min(renderDist,4),
-                       fl+(u.fly?Math.min(u.fly,0.9):0),
-                       camera.position.z+fx.z*Math.min(renderDist,4));
-      }
+      // do NOT teleport — seed combat position from where it currently renders, so it
+      // walks toward you from a visible distance instead of popping onto you.
+      e.position.set(tx, currentFloorY()+(u.fly?u.fly:0), tz);
       if(u.boss&&!u.introDone)bossIntro(e);
     }
     // disengage only if you walk far beyond pursuit range
@@ -2311,7 +2308,7 @@ function bossThink(b,dt){
     if(!u.hasClips)flash(b,u.comboT<.25?0xff5533:0xffaa33);
     if(u.comboT<=0){
       const [,kind]=u.combo.shift();
-      if(d< (kind==="wave"?6:2.4)) hurtPlayer(u.dmg*(kind==="slam"?1.5:1),kind);
+      if(d< (kind==="wave"?7:4.6)) hurtPlayer(u.dmg*(kind==="slam"?1.5:1),kind);
       if(kind==="wave") shockwave(b.position);
       if(u.combo.length){ u.comboT=u.combo[0][0]/(1+u.phase*.3); if(u.hasClips)attackAnim(b); }
       else u.cd=rand(1.2,2.4)-u.phase*.25;
@@ -2320,10 +2317,12 @@ function bossThink(b,dt){
   }
   const bdx=camera.position.x-b.position.x,bdz=camera.position.z-b.position.z;
   const bHoriz=Math.hypot(bdx,bdz);
-  const bTargetY=G.floorY+(G.legend.boss.type==="wraith"?0.35:0);
-  b.position.y+=(bTargetY-b.position.y)*Math.min(1,dt*3);
-  if(bHoriz>2.2){const inv=1/(bHoriz||1);b.position.x+=bdx*inv*u.speed*dt;b.position.z+=bdz*inv*u.speed*dt;
+  const bTargetY=currentFloorY()+(G.legend.boss.type==="wraith"?0.35:0);
+  b.position.y+=(bTargetY-b.position.y)*Math.min(1,dt*4);
+  const bStop=4.0;                            // bosses are big — keep them further so they're framed
+  if(bHoriz>bStop){const inv=1/(bHoriz||1);b.position.x+=bdx*inv*u.speed*dt;b.position.z+=bdz*inv*u.speed*dt;
     locomotion(b,true,true);}
+  else if(bHoriz<bStop-1.0){const inv=1/(bHoriz||1);b.position.x-=bdx*inv*u.speed*0.7*dt;b.position.z-=bdz*inv*u.speed*0.7*dt;locomotion(b,true,false);}
   else locomotion(b,false,false);
   if(u.world)syncEntityGPS(b);
   u.cd-=dt;
@@ -2358,32 +2357,38 @@ function animEnemy(e,dt,t){
   }
 }
 function enemyThink(e,dt){
-  const u=e.userData,d=e.position.distanceTo(camera.position);
+  const u=e.userData;
   e.lookAt(camera.position.x,u.fly?camera.position.y:0,camera.position.z);
-  const baseY=(u.groundY!=null?u.groundY:G.floorY);
-  const targetY=baseY+(u.fly?Math.min(u.fly,0.9):0);
-  e.position.y+=(targetY-e.position.y)*Math.min(1,dt*4);
+  // stand on the LIVE floor every frame (no stale captured height → no floating)
+  const targetY=currentFloorY()+(u.fly?Math.min(u.fly,0.9):0);
+  e.position.y+=(targetY-e.position.y)*Math.min(1,dt*6);
   if(!u.hasClips)animEnemy(e,dt,clock.elapsedTime);
+  const stop = u.fly?3.0:FIGHT_DIST;          // keep enough distance to be seen
   // mid-attack: hold position; land the hit partway through the swing
   if(u.state==="windup"||(u.state==="active"&&u._wind)){
     u.cd-=dt;if(!u.hasClips)flash(e,0xff7744);
     if(u.cd<=0){const hd=Math.hypot(camera.position.x-e.position.x,camera.position.z-e.position.z);
-      if(hd<(u.fly?2.6:2.2))hurtPlayer(u.dmg,"slash");u._wind=false;u.cd=rand(1.4,2.6);}
+      if(hd<HIT_REACH)hurtPlayer(u.dmg,"slash");u._wind=false;u.cd=rand(1.4,2.6);}
     return;
   }
   const dx=camera.position.x-e.position.x, dz=camera.position.z-e.position.z;
   const dHoriz=Math.hypot(dx,dz);
-  const reach=u.fly?2.2:1.6;
-  if(dHoriz>reach){
+  if(dHoriz>stop){
     const inv=1/(dHoriz||1);
     e.position.x+=dx*inv*u.speed*1.4*dt;
     e.position.z+=dz*inv*u.speed*1.4*dt;
-    locomotion(e,true,true);                  // running toward you
+    locomotion(e,true,true);                  // walking/running toward you
+  } else if(dHoriz<stop-0.8){
+    // too close — back off a little so it stays at a visible fighting distance
+    const inv=1/(dHoriz||1);
+    e.position.x-=dx*inv*u.speed*0.8*dt;
+    e.position.z-=dz*inv*u.speed*0.8*dt;
+    locomotion(e,true,false);
   } else {
-    locomotion(e,false,false);                // in range, idle stance between swings
+    locomotion(e,false,false);                // holding fighting distance, idle stance
   }
   u.cd-=dt;
-  if(u.cd<=0&&dHoriz<reach+0.6){
+  if(u.cd<=0&&dHoriz<HIT_REACH){
     u._wind=true;
     const dur=attackAnim(e);                  // random attack; time the hit to mid-swing
     u.cd=dur?dur*0.45:0.6;
@@ -2477,7 +2482,7 @@ function playerAttack(){
   const w=G.equipped.weapon;
   let dmg=(w?w.dmg:6)+G.stats.attack*3;
   if(Math.random()<G.stats.strike*0.05){dmg=Math.round(dmg*2.2);toast(curLang()==="es"?"¡Crítico!":"Critical!",600);}
-  const reach=w&&/bow|spear/i.test(w.nm)?8:2.6;
+  const reach=w&&/bow|spear/i.test(w.nm)?9:4.6;
   if(G.player.st<12){toast(curLang()==="es"?"Agotado…":"Exhausted…",900);return;}
   G.player.st-=12;updBars();
   swingFX();
