@@ -1697,10 +1697,11 @@ async function preloadModels(onProgress){
   let done=0;
   await Promise.all(list.map(async k=>{
     try{ await ModelCache.get(k); }catch(e){}
+    try{ await loadAnimClips(k); }catch(e){}
     done++; if(onProgress)onProgress(done,list.length,k);
   }));
   const got=list.filter(k=>ModelCache.cache[k]).length;
-  log("preload complete:",got+"/"+list.length,"models cached");
+  log("preload complete:",got+"/"+list.length,"models + animations cached");
 }
 /* probe every expected filename and report */
 async function testModels(){
@@ -1722,45 +1723,188 @@ async function testModels(){
   toast(found+"/"+all.length+" models found — details in 🐞",3500);
 }
 const MIXERS=[];
-function fitAndPose(src,clips,targetH){
-  const root=src.clone(true);
-  root.traverse(o=>{if(o.isMesh){o.castShadow=false;o.frustumCulled=true;
-    if(o.material){o.material=o.material.clone();}}});
-  const box=new THREE.Box3().setFromObject(root);
-  const size=box.getSize(new THREE.Vector3());
-  const sc=targetH/Math.max(size.y,.001);
-  root.scale.setScalar(sc);
-  const box2=new THREE.Box3().setFromObject(root);
-  root.position.y=-box2.min.y;                       // feet on the ground
-  root.position.x=-((box2.min.x+box2.max.x)/2);      // centered
-  root.position.z=-((box2.min.z+box2.max.z)/2);
-  let mixer=null;
-  if(clips&&clips.length){
-    mixer=new THREE.AnimationMixer(root);
-    mixer.clipAction(clips[0]).play();
-    MIXERS.push(mixer);
-  }
-  return {root,mixer};
+/* ===================================================================
+   ANIMATION MANIFEST — per enemy/boss, the animation GLB files in
+   animations/<folder>/, classified by gameplay role.
+   walkFolder name == key here (note: hypoglif → folder "hypogliff",
+   tentacle/treant/etc match). Single-walk enemies (wolf, crabgolem,
+   gargoyle, hypoglif, fulion, boss_beast) only have a walk loop.
+   =================================================================== */
+const ANIM_BASE = (typeof PAGE_ROOT!=="undefined"?PAGE_ROOT:"")+"animations/";
+const ANIM = {
+  spirit: { folder:"spirit", prefix:"Meshy_AI_Violet_Veil_biped_Animation_", suffix:"_withSkin.glb",
+    idle:["Grab_Wall_Midair_Idle"], walk:["Walking","Unsteady_Walk"], run:["Running"],
+    attack:["Push_Forward_and_Stop","Shield_Push_Left"], hit:["falling_down"], death:["falling_down"] },
+  skeleton: { folder:"skeleton", prefix:"Meshy_AI_Blazing_Skeleton_biped_Animation_", suffix:"_withSkin.glb",
+    idle:["Sneaky_Walk"], walk:["Walking","Limping_Walk_3"], run:["Running"],
+    attack:["Weapon_Combo_2"], hit:["Knock_Down_1","Shot_and_Fall_Backward"], death:["Shot_and_Fall_Backward"] },
+  tentacle: { folder:"tentacle", prefix:"Meshy_AI_Tentacled_Dreadlord_biped_Animation_", suffix:"_withSkin.glb",
+    idle:["Walking"], walk:["Walking"], run:["Running"],
+    attack:["Double_kick_forward","Flying_Fist_Kick","Lunge_Roundhouse_Kick","Spartan_Kick","Step_in_High_Kick","Sweep_Kick"],
+    hit:["Shot_and_Blown_Back"], death:["Shot_and_Blown_Back"] },
+  goblin: { folder:"goblin", prefix:"Meshy_AI_Grotfang_the_Greenbla_biped_Animation_", suffix:"_withSkin.glb",
+    idle:["Axe_Breathe_and_Look_Around"], walk:["Walking"], run:["Running"],
+    attack:["Axe_Spin_Attack","Charged_Slash","Right_Hand_Sword_Slash","Weapon_Combo_1","Weapon_Combo_2","Weapon_Combo"],
+    hit:["Knock_Down"], death:["Knock_Down"] },
+  minotaur: { folder:"minotaur", prefix:"Meshy_AI_Ironhorn_Berserker_biped_Animation_", suffix:"_withSkin.glb",
+    idle:["Walking_Scan_with_Sudden_Look_Back"], walk:["Walking"], run:["Running","RunFast"],
+    attack:["Attack","Heavy_Hammer_Swing","Right_Hand_Sword_Slash"], hit:["dying_backwards"], death:["dying_backwards"] },
+  treant: { folder:"treant", prefix:"Meshy_AI_Grove_Colossus_biped_Animation_", suffix:"_withSkin.glb",
+    idle:["Axe_Breathe_and_Look_Around"], walk:["Walking","Unsteady_Walk"], run:["Running"],
+    attack:["Axe_Spin_Attack","Double_Combo_Attack","Skill_01","Weapon_Combo"], hit:["Fall_Down"], death:["Fall_Down"] },
+  drowned: { folder:"drowned", prefix:"Meshy_AI_Twinblade_Skeleton_biped_Animation_", suffix:"_withSkin.glb",
+    idle:["Axe_Breathe_and_Look_Around"], walk:["Walking"], run:["Running"],
+    attack:["Attack","Crouch_Charge_and_Throw","Male_Head_Down_Charge","Weapon_Combo_1"],
+    hit:["Fall_Down"], death:["Fall_Down"] },
+  // single-walk-only enemies: just a walk loop, keep procedural extras
+  wolf:     { folder:"wolf",     walkFile:"wolf_walk.glb" },
+  crabgolem:{ folder:"crabgolem",walkFile:"crabgolem_walk.glb" },
+  gargoyle: { folder:"gargoyle", walkFile:"gargoyle_walk.glb" },
+  hypoglif: { folder:"hypogliff",walkFile:"hypogliff_walk.glb" }, // note double-f folder
+  fulion:   { folder:"fulion",   walkFile:"fulion_walk.glb" },
+  // ---- bosses ----
+  boss_wraith: { folder:"boss_wraith", prefix:"Meshy_AI_Amethyst_Empress_biped_Animation_", suffix:"_withSkin.glb",
+    idle:["Walk_Slowly_and_Look_Around"], walk:["Walking"], run:["Running"],
+    attack:["Charged_Ground_Slam","Female_Crouch_Pick_Throw_Forward","Grip_and_Throw_Down","Left_Hook_from_Guard","Leg_Sweep","Shield_Push_Left","Skill_01","Skill_02"],
+    hit:["Strangled_and_Fall_Forward"], death:["Strangled_and_Fall_Forward"], roar:["Shouting_Angrily"] },
+  boss_knight: { folder:"boss_knight", prefix:"Meshy_AI_The_Horned_Dread_Knig_biped_Animation_", suffix:"_withSkin.glb",
+    idle:["Walking"], walk:["Walking"], run:["Running"],
+    attack:["Double_Combo_Attack","Left_Slash","Reaping_Swing","Triple_Combo_Attack"],
+    hit:["Hit_in_Back_While_Running"], death:["Electrocuted_Fall"] },
+  boss_sorcerer: { folder:"boss_sorcerer", prefix:"Meshy_AI_The_Eldritch_Archmage_biped_Animation_", suffix:"_withSkin.glb",
+    idle:["Idle_10"], walk:["Walking","Thoughtful_Walk"], run:["Running"],
+    attack:["Attack","Charged_Ground_Slam","Charged_Spell_Cast","Charged_Spell_Cast_1","Skill_01","Skill_03","Weapon_Combo","Grip_and_Throw_Down"],
+    hit:["Shot_and_Fall_Forward"], death:["Shot_and_Fall_Forward"] },
+  boss_colossus: { folder:"boss_colossus", prefix:"Meshy_AI_Verdantstone_Colossus_biped_Animation_", suffix:"_withSkin.glb",
+    idle:["Sneaky_Walk"], walk:["Walking","Limping_Walk_1"], run:["Running"],
+    attack:["Angry_Ground_Stomp","Axe_Spin_Attack","Charged_Upward_Slash","Heavy_Hammer_Swing","Left_Hook_from_Guard","Punch_Combo_4","Right_Hand_Sword_Slash","Thrust_Slash"],
+    hit:["Hit_in_Back_While_Running"], death:["Shot_in_the_Back_and_Fall"] },
+  boss_beast: { folder:"boss_beast", walkFile:"boss_wolf_walk.glb" },
+};
+
+function animURL(folder,file){
+  let base=ANIM_BASE.trim();if(base&&!base.endsWith("/"))base+="/";
+  return new URL(base+folder+"/"+file,location.href).href;
 }
-function modelHeight(g){ // measured from the procedural stand-in
+/* cache of loaded AnimationClips per enemy/boss key */
+const ClipCache={};      // key -> {idle:[clip],walk:[clip],...}
+function clipFileFor(spec, role, label){
+  // single-walk enemies use walkFile directly
+  if(spec.walkFile) return spec.walkFile;
+  return spec.prefix+label+spec.suffix;
+}
+async function loadAnimClips(key){
+  if(ClipCache[key])return ClipCache[key];
+  const spec=ANIM[key];if(!spec){ClipCache[key]=null;return null;}
+  if(!(await ensureGLTFLoader())||!THREE.GLTFLoader){ClipCache[key]=null;return null;}
+  const out={idle:[],walk:[],run:[],attack:[],hit:[],death:[],roar:[]};
+  const loader=new THREE.GLTFLoader();
+  if(THREE.DRACOLoader){const dr=new THREE.DRACOLoader();
+    dr.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.4.1/");loader.setDRACOLoader(dr);}
+  // single-walk enemies: one file → walk role
+  if(spec.walkFile){
+    const url=animURL(spec.folder,spec.walkFile);
+    await new Promise(res=>{ loader.load(url,g=>{
+      if(g.animations&&g.animations[0])out.walk.push(g.animations[0]);res();
+    },undefined,()=>{log("anim miss:",key,spec.walkFile);res();}); });
+    ClipCache[key]=out;return out;
+  }
+  // multi-clip: load each referenced label once, route to its role(s)
+  const roles=["idle","walk","run","attack","hit","death","roar"];
+  const seen={};            // label → clip (avoid double-loading shared labels)
+  for(const role of roles){
+    for(const label of (spec[role]||[])){
+      if(seen[label]===undefined){
+        const url=animURL(spec.folder, spec.prefix+label+spec.suffix);
+        seen[label]=await new Promise(res=>{ loader.load(url,g=>{
+          const c=g.animations&&g.animations[0];
+          if(c){c.userData={label};} res(c||null);
+        },undefined,()=>{log("anim miss:",key,label);res(null);}); });
+      }
+      if(seen[label])out[role].push(seen[label]);
+    }
+  }
+  const total=Object.values(out).reduce((a,b)=>a+b.length,0);
+  log("anim clips for",key,"→",total,"loaded");
+  ClipCache[key]=out;return out;
+}
+function modelHeight(g){
   const b=new THREE.Box3().setFromObject(g);
   return Math.max(.4,b.getSize(new THREE.Vector3()).y);
 }
-function applyModel(holder,data){
+function fitModel(src,targetH){
+  const root=src.clone(true);
+  root.traverse(o=>{if(o.isMesh){o.castShadow=false;o.frustumCulled=false;
+    if(o.material)o.material=o.material.clone();}});
+  const box=new THREE.Box3().setFromObject(root);
+  const size=box.getSize(new THREE.Vector3());
+  root.scale.setScalar(targetH/Math.max(size.y,.001));
+  const box2=new THREE.Box3().setFromObject(root);
+  root.position.set(-((box2.min.x+box2.max.x)/2), -box2.min.y, -((box2.min.z+box2.max.z)/2));
+  return root;
+}
+/* play a role on an entity, cross-fading; one-shots (attack/hit/death) auto-return to locomotion */
+function playRole(entity, role, opts={}){
+  const A=entity.userData.animSet;     // {mixer, clips:{role:[action...]}, cur}
+  if(!A||!A.clips)return;
+  const pool=A.clips[role]&&A.clips[role].length?A.clips[role]:null;
+  // fallbacks: attack→walk, run→walk, idle→walk, hit/death→(skip if none)
+  let useRole=role, list=pool;
+  if(!list){ if(role==="run"||role==="idle"||role==="attack")list=A.clips.walk; 
+    else return; useRole="walk"; }
+  if(!list||!list.length)return;
+  const action = opts.index!=null ? list[opts.index%list.length]
+               : (role==="attack" ? list[Math.floor(Math.random()*list.length)]
+               : list[0]);
+  if(!action)return;
+  if(A.cur===action && !opts.force) return;          // already playing this loop
+  const oneShot=(role==="attack"||role==="hit"||role==="death"||role==="roar");
+  const prev=A.cur;
+  action.reset();
+  action.setLoop(oneShot?THREE.LoopOnce:THREE.LoopRepeat, oneShot?1:Infinity);
+  action.clampWhenFinished=(role==="death");
+  action.enabled=true;action.setEffectiveWeight(1);
+  action.timeScale = opts.timeScale || 1;
+  if(prev && prev!==action) action.crossFadeFrom(prev, opts.fade!=null?opts.fade:0.18, false);
+  action.play();
+  A.cur=action; A.curRole=role;
+  if(oneShot){
+    A.busy=true; A.busyUntil=performance.now() + (action.getClip().duration*1000)/(opts.timeScale||1);
+  }
+}
+function applyModel(holder,data,key){
   const targetH=modelHeight(holder);
-  const {root,mixer}=fitAndPose(data.scene,data.clips,targetH);
+  const root=fitModel(data.scene,targetH);
   while(holder.children.length)holder.remove(holder.children[0]);
   holder.add(root);
-  if(holder.userData){holder.userData.mixer=mixer;
-    const a=holder.userData.anim;if(a&&!["hover","bob","heavy"].includes(a.kind))holder.userData.anim=null;}
+  // drop procedural part-animation; keep only positional hover/bob/heavy on flyers
+  const a=holder.userData&&holder.userData.anim;
+  if(a&&!["hover","bob","heavy"].includes(a.kind))holder.userData.anim=null;
   if(holder.anim&&!["hover","bob","heavy"].includes(holder.anim.kind))holder.anim=null;
+  // build mixer + actions from loaded clips (retargeted onto this skeleton)
+  const mixer=new THREE.AnimationMixer(root);MIXERS.push(mixer);
+  const set={mixer,clips:{idle:[],walk:[],run:[],attack:[],hit:[],death:[],roar:[]},cur:null,curRole:null,busy:false,busyUntil:0};
+  const clipData=ClipCache[key];
+  if(clipData){
+    for(const role in clipData){
+      for(const clip of clipData[role]){
+        try{ set.clips[role].push(mixer.clipAction(clip)); }catch(e){}
+      }
+    }
+  }
+  holder.userData.animSet=set;
+  holder.userData.hasClips=!!(clipData && Object.values(clipData).some(a=>a.length));
+  // start in idle/walk
+  if(holder.userData.hasClips) playRole(holder, holder.userData.animSet.clips.idle.length?"idle":"walk");
 }
 async function tryUpgradeModel(holder,kind){
-  if(ModelCache.cache[kind]){applyModel(holder,ModelCache.cache[kind]);return;} // instant, pre-cached
-  const targetH=modelHeight(holder);
+  // ensure clips loaded (cached) before/after model
+  const clipP=loadAnimClips(kind);
+  if(ModelCache.cache[kind]){ await clipP; if(holder.parent)applyModel(holder,ModelCache.cache[kind],kind); return; }
   const data=await ModelCache.get(kind);
-  if(!data||!holder.parent)return;                   // missing file, or enemy already dead
-  applyModel(holder,data);
+  await clipP;
+  if(!data||!holder.parent)return;
+  applyModel(holder,data,kind);
 }
 /* ---- stat blocks + biome pools ---- */
 const ENEMY_STATS={
@@ -1941,11 +2085,15 @@ function updateWorld(dt){
     // disengage only if you really walk off (GPS distance, not render)
     if(u.state==="active"&&dist>ENGAGE_R*2.2){u.state="idle";if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}}
     if(u.state==="idle"){
+      const moved=Math.hypot(tx-e.position.x,tz-e.position.z);
       e.position.x+=(tx-e.position.x)*Math.min(1,dt*4);
       e.position.z+=(tz-e.position.z)*Math.min(1,dt*4);
-      e.position.y=G.floorY+(u.fly?u.fly:0);   // feet on the real ground (flyers hover above it)
-      animEnemy(e,dt,clock.elapsedTime);
+      e.position.y=G.floorY+(u.fly?u.fly:0);
+      if(u.hasClips){ locomotion(e, moved>0.05, false); }
+      else animEnemy(e,dt,clock.elapsedTime);
       e.lookAt(camera.position.x,e.position.y,camera.position.z);
+    }else if(u.state==="dead"){
+      // playing death anim; hold position, let mixer finish
     }else{ // active: combat AI owns motion (chases the camera directly)
       if(u.boss)bossThink(e,dt);else enemyThink(e,dt);
     }
@@ -2106,37 +2254,40 @@ function bossAnim(b,dt,t){
 function bossThink(b,dt){
   const u=b.userData,d=b.position.distanceTo(camera.position);
   b.lookAt(camera.position.x,0,camera.position.z);
-  bossAnim(b,dt,clock.elapsedTime);
+  if(!u.hasClips)bossAnim(b,dt,clock.elapsedTime);
   // phase transitions
   const frac=u.hp/u.hpMax;
   const ph=frac>.66?0:frac>.33?1:2;
   if(ph!==u.phase){u.phase=ph;u.speed+=.25;u.dmg+=4;
     const p=G.legend.boss.phases[Math.min(ph,G.legend.boss.phases.length-1)];
     Dlg.say([`Phase ${ph+1} — ${p.name}. ${p.taunt}`]);
+    if(u.hasClips&&u.animSet&&u.animSet.clips.roar&&u.animSet.clips.roar.length)playRole(b,"roar");
     shockwave(b.position);}
   if(u.combo.length){ // executing a combo
     u.comboT-=dt;
-    flash(b,u.comboT<.25?0xff5533:0xffaa33);
+    if(!u.hasClips)flash(b,u.comboT<.25?0xff5533:0xffaa33);
     if(u.comboT<=0){
       const [,kind]=u.combo.shift();
       if(d< (kind==="wave"?6:2.4)) hurtPlayer(u.dmg*(kind==="slam"?1.5:1),kind);
       if(kind==="wave") shockwave(b.position);
-      if(u.combo.length) u.comboT=u.combo[0][0]/(1+u.phase*.3);
+      if(u.combo.length){ u.comboT=u.combo[0][0]/(1+u.phase*.3); if(u.hasClips)attackAnim(b); }
       else u.cd=rand(1.2,2.4)-u.phase*.25;
     }
     return;
   }
   const bdx=camera.position.x-b.position.x,bdz=camera.position.z-b.position.z;
   const bHoriz=Math.hypot(bdx,bdz);
-  // wraith floats; others stand on the floor
   const bTargetY=G.floorY+(G.legend.boss.type==="wraith"?0.35:0);
   b.position.y+=(bTargetY-b.position.y)*Math.min(1,dt*3);
-  if(bHoriz>2.2){const inv=1/(bHoriz||1);b.position.x+=bdx*inv*u.speed*dt;b.position.z+=bdz*inv*u.speed*dt;}
+  if(bHoriz>2.2){const inv=1/(bHoriz||1);b.position.x+=bdx*inv*u.speed*dt;b.position.z+=bdz*inv*u.speed*dt;
+    locomotion(b,true,true);}
+  else locomotion(b,false,false);
   if(u.world)syncEntityGPS(b);
   u.cd-=dt;
   if(u.cd<=0&&d<7){
     u.combo=COMBOS[Math.min(COMBOS.length-1,Math.floor(Math.random()*(2+u.phase)))].slice();
     u.comboT=u.combo[0][0]/(1+u.phase*.3);
+    if(u.hasClips)attackAnim(b);              // first swing of the combo
   }
 }
 function animEnemy(e,dt,t){
@@ -2166,27 +2317,51 @@ function animEnemy(e,dt,t){
 function enemyThink(e,dt){
   const u=e.userData,d=e.position.distanceTo(camera.position);
   e.lookAt(camera.position.x,u.fly?camera.position.y:0,camera.position.z);
-  animEnemy(e,dt,clock.elapsedTime);
-  if(u.state==="windup"||u.state==="active"&&u._wind){u.cd-=dt;flash(e,0xff7744);
-    if(u.cd<=0){const hd=Math.hypot(camera.position.x-e.position.x,camera.position.z-e.position.z);
-      if(hd<(u.fly?2.6:2.0))hurtPlayer(u.dmg,"slash");u._wind=false;u.cd=rand(1.4,2.6);}return;}
-  // horizontal distance only — vertical gap must never block reaching the player
-  const dx=camera.position.x-e.position.x, dz=camera.position.z-e.position.z;
-  const dHoriz=Math.hypot(dx,dz);
-  const reach=u.fly?2.2:1.5;
-  // settle to the correct height: ground enemies on the floor, flyers hover just above it
   const baseY=(u.groundY!=null?u.groundY:G.floorY);
   const targetY=baseY+(u.fly?Math.min(u.fly,0.9):0);
   e.position.y+=(targetY-e.position.y)*Math.min(1,dt*4);
+  if(!u.hasClips)animEnemy(e,dt,clock.elapsedTime);
+  // mid-attack: hold position; land the hit partway through the swing
+  if(u.state==="windup"||(u.state==="active"&&u._wind)){
+    u.cd-=dt;if(!u.hasClips)flash(e,0xff7744);
+    if(u.cd<=0){const hd=Math.hypot(camera.position.x-e.position.x,camera.position.z-e.position.z);
+      if(hd<(u.fly?2.6:2.2))hurtPlayer(u.dmg,"slash");u._wind=false;u.cd=rand(1.4,2.6);}
+    return;
+  }
+  const dx=camera.position.x-e.position.x, dz=camera.position.z-e.position.z;
+  const dHoriz=Math.hypot(dx,dz);
+  const reach=u.fly?2.2:1.6;
   if(dHoriz>reach){
     const inv=1/(dHoriz||1);
     e.position.x+=dx*inv*u.speed*1.4*dt;
     e.position.z+=dz*inv*u.speed*1.4*dt;
+    locomotion(e,true,true);                  // running toward you
+  } else {
+    locomotion(e,false,false);                // in range, idle stance between swings
   }
   u.cd-=dt;
-  if(u.cd<=0&&dHoriz<reach+0.6){u._wind=true;u.cd=.6;}
+  if(u.cd<=0&&dHoriz<reach+0.6){
+    u._wind=true;
+    const dur=attackAnim(e);                  // random attack; time the hit to mid-swing
+    u.cd=dur?dur*0.45:0.6;
+  }
   if(u.world)syncEntityGPS(e);
 }
+function locomotion(e,moving,running){
+  const u=e.userData;if(!u.hasClips||!u.animSet)return;
+  if(u.animSet.busy && performance.now()<u.animSet.busyUntil)return; // one-shot playing
+  if(u.animSet.busy){u.animSet.busy=false;}                          // one-shot finished
+  const want = running?"run":(moving?"walk":"idle");
+  if(u.animSet.curRole!==want) playRole(e, want);
+}
+function attackAnim(e){ // trigger a random attack one-shot; returns its duration (s)
+  const u=e.userData;if(!u.hasClips||!u.animSet){return 0;}
+  if(u.animSet.busy && performance.now()<u.animSet.busyUntil)return 0;
+  playRole(e,"attack");
+  const a=u.animSet.cur;return a?a.getClip().duration:0.6;
+}
+function hitAnim(e){const u=e.userData;if(u.hasClips&&u.animSet)playRole(e,"hit",{fade:0.06});}
+function deathAnim(e){const u=e.userData;if(u.hasClips&&u.animSet){playRole(e,"death",{fade:0.05});return (u.animSet.cur?u.animSet.cur.getClip().duration:0.8);}return 0;}
 function syncEntityGPS(e){
   // While active, the enemy lives in local combat space and its GPS anchor simply
   // tracks the player so it never drifts away. (No inverse transform → no runaway.)
@@ -2290,29 +2465,34 @@ function dodge(){
   if(G.player.st<20)return toast(curLang()==="es"?"Agotado…":"Exhausted…",800);
   G.player.st-=20;invuln=.6;updBars();Audio.sfx("dodge");toast(curLang()==="es"?"⟿ esquiva":"⟿ dodge",500);
 }
-function damage(t,d){
-  const u=t.userData;u.hp-=d;
-  flash(t,0xffffff);setTimeout(()=>unflash(t),90);Audio.sfx("hit");
+function damage(tgt,d){
+  const u=tgt.userData;if(u.dead)return;u.hp-=d;
+  if(!u.hasClips){flash(tgt,0xffffff);setTimeout(()=>unflash(tgt),90);}
+  Audio.sfx("hit");
   if(u.boss){$("bossfill").style.transform=`scaleX(${clamp(u.hp/u.hpMax,0,1)})`;}
   if(u.hp<=0){
-    if(u.boss){bossDown();}
-    else{
-      scene.remove(t);G.world=G.world.filter(x=>x!==t);G.enemies=G.enemies.filter(x=>x!==t);
-<<<<<<< Updated upstream
-      const sr=t.userData.souls||10;G.player.souls+=sr;toast("Echo absorbed +"+sr);
-=======
-      const sr=t.userData.souls||10;G.player.souls+=sr;toast((curLang()==="es"?"Eco absorbido +":"Echo absorbed +")+sr);
->>>>>>> Stashed changes
-      const k=t.userData.kind||"husk";G.kills[k]=(G.kills[k]||0)+1;
+    if(u.boss){
+      if(u.hasClips){const dd=deathAnim(tgt); setTimeout(bossDown, Math.max(300,dd*1000));}
+      else bossDown();
+    } else {
+      u.dead=true;
+      const sr=u.souls||10;G.player.souls+=sr;toast((curLang()==="es"?"Eco absorbido +":"Echo absorbed +")+sr);
+      const k=u.kind||"husk";G.kills[k]=(G.kills[k]||0)+1;
       if(Math.random()<.5) giveItem(lootRoll("pot"));
-      // cluster cleared when none of its foes remain
-      const cl=t.userData.cluster;
-      if(cl&&!G.world.some(w=>w.userData.cluster===cl)){
-        cl.cleared=true;cl.clearedAt=Date.now();G._heatDirty=true;
-        G.player.hp=G.player.hpMax;G.player.mp=G.player.mpMax;G.player.st=G.player.stMax;updBars();
-        Audio.sfx("loot");toast(zoneName(cl.biome)+" — "+t("bars_restore"),2200);autosave();
-      }
+      const cl=u.cluster;
+      const removeNow=()=>{scene.remove(tgt);G.world=G.world.filter(x=>x!==tgt);G.enemies=G.enemies.filter(x=>x!==tgt);
+        if(cl&&!G.world.some(w=>w.userData.cluster===cl&&!w.userData.dead)){
+          cl.cleared=true;cl.clearedAt=Date.now();G._heatDirty=true;
+          G.player.hp=G.player.hpMax;G.player.mp=G.player.mpMax;G.player.st=G.player.stMax;updBars();
+          Audio.sfx("loot");toast(zoneName(cl.biome)+" — "+t("bars_restore"),2200);autosave();
+        }};
+      if(u.hasClips){const dd=deathAnim(tgt); u.state="dead";
+        // freeze it in place during the death animation, then remove
+        setTimeout(removeNow, Math.max(400,dd*1000));
+      } else removeNow();
     }
+  } else {
+    if(u.hasClips && Math.random()<0.5 && !(u.animSet&&u.animSet.busy)) hitAnim(tgt); // occasional flinch
   }
 }
 function hurtPlayer(d,kind){
@@ -2434,12 +2614,24 @@ function bestShow(key){
   if(bestModel)bestScene.remove(bestModel);
   const builder=key.startsWith("boss_")?BOSS_BUILDERS[key.slice(5)]:BUILDERS[key];
   bestModel=applyRealism(builder(),key.startsWith("boss_")?key.slice(5):key);bestScene.add(bestModel);
-  tryUpgradeModel(bestModel,key).then(()=>{ // reframe if a GLB swapped in
+  tryUpgradeModel(bestModel,key).then(()=>{
     if(!bestModel)return;
     const bb=new THREE.Box3().setFromObject(bestModel);
     const sz=bb.getSize(new THREE.Vector3()),ct=bb.getCenter(new THREE.Vector3());
     const rr=Math.max(sz.x,sz.y,sz.z);
     bestCam.position.set(ct.x+rr*1.1,ct.y+rr*.45,ct.z+rr*1.5);bestCam.lookAt(ct);
+    // showcase: loop idle, then occasionally an attack
+    if(bestModel.userData.hasClips){
+      playRole(bestModel,"idle");
+      clearInterval(bestModel._showcase);
+      bestModel._showcase=setInterval(()=>{
+        if(!bestOpen||!bestModel||!bestModel.userData.animSet)return;
+        const set=bestModel.userData.animSet;
+        if(set.busy && performance.now()<set.busyUntil)return;
+        if(Math.random()<0.6 && set.clips.attack.length) playRole(bestModel,"attack");
+        else playRole(bestModel, set.clips.idle.length?"idle":"walk");
+      },2200);
+    }
   });
   // frame the model
   const box=new THREE.Box3().setFromObject(bestModel);
