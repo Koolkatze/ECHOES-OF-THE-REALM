@@ -1898,8 +1898,12 @@ function applyModel(holder,data,key){
   }
   holder.userData.animSet=set;
   holder.userData.hasClips=!!(clipData && Object.values(clipData).some(a=>a.length));
-  // start in idle/walk
-  if(holder.userData.hasClips) playRole(holder, holder.userData.animSet.clips.idle.length?"idle":"walk");
+  // walkOnly enemies (single walk clip) just loop walking forever
+  holder.userData.walkOnly = !!(ANIM[key] && ANIM[key].walkFile);
+  if(holder.userData.hasClips){
+    if(holder.userData.walkOnly) playRole(holder,"walk",{force:true});
+    else playRole(holder, set.clips.idle.length?"idle":"walk");
+  }
 }
 async function tryUpgradeModel(holder,kind){
   // ensure clips loaded (cached) before/after model
@@ -2353,19 +2357,20 @@ function enemyThink(e,dt){
 }
 function locomotion(e,moving,running){
   const u=e.userData;if(!u.hasClips||!u.animSet)return;
+  if(u.walkOnly){ if(u.animSet.curRole!=="walk") playRole(e,"walk"); return; }
   if(u.animSet.busy && performance.now()<u.animSet.busyUntil)return; // one-shot playing
   if(u.animSet.busy){u.animSet.busy=false;}                          // one-shot finished
   const want = running?"run":(moving?"walk":"idle");
   if(u.animSet.curRole!==want) playRole(e, want);
 }
 function attackAnim(e){ // trigger a random attack one-shot; returns its duration (s)
-  const u=e.userData;if(!u.hasClips||!u.animSet){return 0;}
+  const u=e.userData;if(!u.hasClips||!u.animSet||u.walkOnly){return 0;}
   if(u.animSet.busy && performance.now()<u.animSet.busyUntil)return 0;
   playRole(e,"attack");
   const a=u.animSet.cur;return a?a.getClip().duration:0.6;
 }
-function hitAnim(e){const u=e.userData;if(u.hasClips&&u.animSet)playRole(e,"hit",{fade:0.06});}
-function deathAnim(e){const u=e.userData;if(u.hasClips&&u.animSet){playRole(e,"death",{fade:0.05});return (u.animSet.cur?u.animSet.cur.getClip().duration:0.8);}return 0;}
+function hitAnim(e){const u=e.userData;if(u.hasClips&&u.animSet&&!u.walkOnly)playRole(e,"hit",{fade:0.06});}
+function deathAnim(e){const u=e.userData;if(u.hasClips&&u.animSet&&!u.walkOnly){playRole(e,"death",{fade:0.05});return (u.animSet.cur?u.animSet.cur.getClip().duration:0.8);}return 0;}
 function syncEntityGPS(e){
   // While active, the enemy lives in local combat space and its GPS anchor simply
   // tracks the player so it never drifts away. (No inverse transform → no runaway.)
@@ -2490,7 +2495,7 @@ function damage(tgt,d){
           G.player.hp=G.player.hpMax;G.player.mp=G.player.mpMax;G.player.st=G.player.stMax;updBars();
           Audio.sfx("loot");toast(zoneName(cl.biome)+" — "+t("bars_restore"),2200);autosave();
         }};
-      if(u.hasClips){const dd=deathAnim(tgt); u.state="dead";
+      if(u.hasClips && !u.walkOnly){const dd=deathAnim(tgt); u.state="dead";
         // freeze it in place during the death animation, then remove
         setTimeout(removeNow, Math.max(400,dd*1000));
       } else removeNow();
