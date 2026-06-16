@@ -1647,6 +1647,10 @@ function ensureGLTFLoader(){
       await load1([
         "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js",
         "https://unpkg.com/three@0.128.0/examples/js/loaders/DRACOLoader.js"]);
+      // SkeletonUtils: correct deep-clone of rigged SkinnedMesh (THREE.clone breaks skinning)
+      await load1([
+        "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js",
+        "https://unpkg.com/three@0.128.0/examples/js/utils/SkeletonUtils.js"]);
       res(true);
     })();
   });
@@ -1709,8 +1713,9 @@ async function preloadModels(onProgress){
   log("preloading",list.length,"models:",list.join(","));
   let done=0;
   await Promise.all(list.map(async k=>{
-    try{ await ModelCache.get(k); }catch(e){}
-    try{ await loadAnimClips(k); }catch(e){}
+    let cd=null;
+    try{ cd=await loadAnimClips(k); }catch(e){}
+    if(!(cd&&cd.model)){ try{ await ModelCache.get(k); }catch(e){} }  // only need static model if no animated one
     done++; if(onProgress)onProgress(done,list.length,k);
   }));
   const got=list.filter(k=>ModelCache.cache[k]).length;
@@ -1810,28 +1815,32 @@ async function loadAnimClips(key){
   if(ClipCache[key])return ClipCache[key];
   const spec=ANIM[key];if(!spec){ClipCache[key]=null;return null;}
   if(!(await ensureGLTFLoader())||!THREE.GLTFLoader){ClipCache[key]=null;return null;}
-  const out={idle:[],walk:[],run:[],attack:[],hit:[],death:[],roar:[]};
+  const out={idle:[],walk:[],run:[],attack:[],hit:[],death:[],roar:[],model:null};
   const loader=new THREE.GLTFLoader();
   if(THREE.DRACOLoader){const dr=new THREE.DRACOLoader();
     dr.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.4.1/");loader.setDRACOLoader(dr);}
-  // single-walk enemies: one file → walk role
+  // single-walk enemies: one file → walk role + rigged model (the file is "withSkin")
   if(spec.walkFile){
     const url=animURL(spec.folder,spec.walkFile);
     await new Promise(res=>{ loader.load(url,g=>{
-      if(g.animations&&g.animations[0])out.walk.push(g.animations[0]);res();
+      if(g.animations&&g.animations[0])out.walk.push(g.animations[0]);
+      out.model=g.scene; res();
     },undefined,()=>{log("anim miss:",key,spec.walkFile);res();}); });
     ClipCache[key]=out;return out;
   }
-  // multi-clip: load each referenced label once, route to its role(s)
+  // multi-clip: every file is "_withSkin" → load each label's GLB; keep clip AND (from the
+  // first one) the rigged scene, so the skeleton the clips were authored on IS the model.
   const roles=["idle","walk","run","attack","hit","death","roar"];
-  const seen={};            // label → clip (avoid double-loading shared labels)
+  const seen={};
   for(const role of roles){
     for(const label of (spec[role]||[])){
       if(seen[label]===undefined){
         const url=animURL(spec.folder, spec.prefix+label+spec.suffix);
         seen[label]=await new Promise(res=>{ loader.load(url,g=>{
           const c=g.animations&&g.animations[0];
-          if(c){c.userData={label};} res(c||null);
+          if(c)c.userData={label};
+          if(!out.model)out.model=g.scene;   // first rigged scene becomes the base model
+          res(c||null);
         },undefined,()=>{log("anim miss:",key,label);res(null);}); });
       }
       if(seen[label])out[role].push(seen[label]);
@@ -1845,10 +1854,19 @@ function modelHeight(g){
   const b=new THREE.Box3().setFromObject(g);
   return Math.max(.4,b.getSize(new THREE.Vector3()).y);
 }
+function cloneRigged(src){
+  // THREE.Object3D.clone() does NOT rebind SkinnedMesh bones → animations don't deform.
+  // SkeletonUtils.clone() (r128 exposes THREE.SkeletonUtils) clones the skeleton correctly.
+  const SU = THREE.SkeletonUtils || (THREE.examples&&THREE.examples.utils&&THREE.examples.utils.SkeletonUtils);
+  if(SU && SU.clone){ try{ return SU.clone(src); }catch(e){ log("SkeletonUtils.clone failed:",e.message); } }
+  return src.clone(true);
+}
 function fitModel(src,targetH){
-  const root=src.clone(true);
+  const root=cloneRigged(src);
   root.traverse(o=>{if(o.isMesh){o.castShadow=false;o.frustumCulled=false;
-    if(o.material)o.material=o.material.clone();}});
+    /* keep the ORIGINAL material so skinning (material.skinning) stays intact;
+       cloning the material per-instance is fine but must preserve skinning flag */
+    if(o.material){const m=o.material.clone(); if(o.isSkinnedMesh)m.skinning=true; o.material=m;}}});
   const box=new THREE.Box3().setFromObject(root);
   const size=box.getSize(new THREE.Vector3());
   root.scale.setScalar(targetH/Math.max(size.y,.001));
@@ -1885,43 +1903,43 @@ function playRole(entity, role, opts={}){
     A.busy=true; A.busyUntil=performance.now() + (action.getClip().duration*1000)/(opts.timeScale||1);
   }
 }
-function applyModel(holder,data,key){
+function applyModel(holder,baseScene,key){
   const targetH=modelHeight(holder);
-  const root=fitModel(data.scene,targetH);
+  const root=fitModel(baseScene,targetH);
   while(holder.children.length)holder.remove(holder.children[0]);
   holder.add(root);
-  // drop procedural part-animation; keep only positional hover/bob/heavy on flyers
   const a=holder.userData&&holder.userData.anim;
   if(a&&!["hover","bob","heavy"].includes(a.kind))holder.userData.anim=null;
   if(holder.anim&&!["hover","bob","heavy"].includes(holder.anim.kind))holder.anim=null;
-  // build mixer + actions from loaded clips (retargeted onto this skeleton)
   const mixer=new THREE.AnimationMixer(root);MIXERS.push(mixer);
   const set={mixer,clips:{idle:[],walk:[],run:[],attack:[],hit:[],death:[],roar:[]},cur:null,curRole:null,busy:false,busyUntil:0};
   const clipData=ClipCache[key];
+  let bound=0;
   if(clipData){
-    for(const role in clipData){
-      for(const clip of clipData[role]){
-        try{ set.clips[role].push(mixer.clipAction(clip)); }catch(e){}
+    for(const role of ["idle","walk","run","attack","hit","death","roar"]){
+      for(const clip of (clipData[role]||[])){
+        try{ const act=mixer.clipAction(clip); set.clips[role].push(act); bound++; }catch(e){}
       }
     }
   }
   holder.userData.animSet=set;
-  holder.userData.hasClips=!!(clipData && Object.values(clipData).some(a=>a.length));
-  // walkOnly enemies (single walk clip) just loop walking forever
+  holder.userData.hasClips=bound>0;
   holder.userData.walkOnly = !!(ANIM[key] && ANIM[key].walkFile);
   if(holder.userData.hasClips){
     if(holder.userData.walkOnly) playRole(holder,"walk",{force:true});
     else playRole(holder, set.clips.idle.length?"idle":"walk");
+    log("model+anim ready:",key,"· actions bound:",bound);
   }
 }
 async function tryUpgradeModel(holder,kind){
-  // ensure clips loaded (cached) before/after model
-  const clipP=loadAnimClips(kind);
-  if(ModelCache.cache[kind]){ await clipP; if(holder.parent)applyModel(holder,ModelCache.cache[kind],kind); return; }
-  const data=await ModelCache.get(kind);
-  await clipP;
+  const clipData=await loadAnimClips(kind);          // also yields a rigged scene in .model
+  if(!holder.parent)return;
+  // Prefer the rigged scene that the CLIPS were authored on → skeleton & tracks always match.
+  if(clipData && clipData.model){ applyModel(holder, clipData.model, kind); return; }
+  // No animations for this kind → fall back to the static models/<kind>.glb if present.
+  const data = ModelCache.cache[kind] || await ModelCache.get(kind);
   if(!data||!holder.parent)return;
-  applyModel(holder,data,kind);
+  applyModel(holder, data.scene, kind);
 }
 /* ---- stat blocks + biome pools ---- */
 const ENEMY_STATS={
