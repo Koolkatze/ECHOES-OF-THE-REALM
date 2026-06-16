@@ -1998,12 +1998,13 @@ G.world=[];            // all live world entities (enemies + boss)
 G.eyeHeight=1.5;       // assumed standing eye height (m) when no floor plane is known
 G.floorY=0;            // world-Y of the real ground; updated each frame
 function currentFloorY(){
-  // Best source first: a live hit-test floor sample (real ground the camera sees).
-  if(G.xr&&G.hitFloorY!=null)return G.hitFloorY;
-  // Else a local-floor reference puts the floor at y=0.
-  if(G.xr&&G._hasFloorRef)return 0;
-  // Else assume the floor sits eyeHeight below the camera.
-  return camera.position.y-G.eyeHeight;
+  if(G.xr&&G.hitFloorY!=null)return G.hitFloorY;          // real measured ground
+  if(G.xr&&G._hasFloorRef)return 0;                       // XR local-floor → y=0
+  // Camera/flat mode: floor sits a fixed eyeHeight below the camera's resting height.
+  // Use the camera's CURRENT y but guard against tilt/NaN by clamping to a sane band.
+  const cy=(camera&&isFinite(camera.position.y))?camera.position.y:1.6;
+  const eh=(G.eyeHeight&&isFinite(G.eyeHeight))?G.eyeHeight:1.5;
+  return cy-eh;
 }
 let _hitTmp=null;
 function sampleHitTest(xrFrame){
@@ -2117,9 +2118,17 @@ function updateWorld(dt){
     // engage when you come within pursuit range (visual sight), unless you're veiled
     if(!G.invisible && u.state!=="active" && u.state!=="dead" && renderDist<PURSUE_R){
       u.state="active";
-      // do NOT teleport — seed combat position from where it currently renders, so it
-      // walks toward you from a visible distance instead of popping onto you.
-      e.position.set(tx, currentFloorY()+(u.fly?u.fly:0), tz);
+      // seed at a VISIBLE distance: keep its current bearing, but push it out to at least
+      // a spawn distance so it never starts on top of you (GPS can place it at ~0 m).
+      let sdx=tx-camera.position.x, sdz=tz-camera.position.z;
+      let sd=Math.hypot(sdx,sdz);
+      const SEED=Math.max(6, FIGHT_DIST+2);    // start ~6 m away, then it walks in
+      if(sd<0.001){ // exactly on top → pick a bearing in front of the camera
+        const fx=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+        sdx=fx.x; sdz=fx.z; sd=Math.hypot(sdx,sdz)||1;
+      }
+      const sf=Math.max(SEED, sd)/sd;          // never pull closer than SEED
+      e.position.set(camera.position.x+sdx*sf, currentFloorY()+(u.fly?u.fly:0), camera.position.z+sdz*sf);
       if(u.boss&&!u.introDone)bossIntro(e);
     }
     // disengage only if you walk far beyond pursuit range
