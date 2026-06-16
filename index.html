@@ -489,7 +489,7 @@ function log(...a){
   try{console.log(...a);}catch(_){}
 }
 addEventListener("DOMContentLoaded",()=>{
-  $("dbgBtn").onclick=()=>{const d=$("dbg");
+  $("dbgBtn").onclick=()=>{G._dbgOn=!G._dbgOn;const d=$("dbg");
     d.style.display=d.style.display==="none"?"block":"none";
     d.textContent=LOGBUF.join("\n");d.scrollTop=d.scrollHeight;};
 });
@@ -2096,68 +2096,78 @@ function updateWorld(dt){
   G.floorY=currentFloorY();
   const {mlat,mlon}=metersPerDeg(G.lat);
   const head=(G.heading||0)*Math.PI/180;
+  const FLOOR=currentFloorY();
   for(let i=G.world.length-1;i>=0;i--){
     const e=G.world[i],u=e.userData;
-    // metres east/north from player
+    // ---- bearing & true distance from player, in world metres ----
     const dN=(u.lat-G.lat)*mlat, dE=(u.lon-G.lon)*mlon;
-    const dist=Math.hypot(dN,dE);
-    if(dist>VISIBLE_R){e.visible=false;continue;}
+    let trueDist=Math.hypot(dN,dE);
+    if(trueDist>VISIBLE_R){e.visible=false;continue;}
     e.visible=true;
-    // Render distance: 1:1 within 25 m, gently compressed beyond so distant foes stay on-screen
-    // but walking ALWAYS closes the gap (monotonic, never clamps you out).
-    // compress far distances, but also FLOOR the near distance so nothing renders on top of you
-    const MIN_DIST=5.0;                         // metres: closest an enemy is ever drawn
-    let renderDist=dist<=25?dist:25+(dist-25)*0.35;
-    renderDist=Math.max(renderDist, MIN_DIST);
-    let bN=dN, bE=dE, bLen=dist;
-    if(bLen<0.5){ // GPS put it basically on you → give it a stable bearing so it's not at origin
-      if(u.bearing===undefined)u.bearing=Math.random()*Math.PI*2;
-      bN=Math.cos(u.bearing); bE=Math.sin(u.bearing); bLen=1;
+    // stable bearing: from GPS if meaningful, else a fixed random one per enemy
+    if(u.bearing===undefined) u.bearing = trueDist>0.5 ? Math.atan2(dE,dN) : Math.random()*Math.PI*2;
+    if(trueDist>0.5) u.bearing = Math.atan2(dE,dN);   // keep updating from GPS while it's valid
+    // ---- approach distance: the distance we actually render the enemy at ----
+    // initialise it to its true distance (so GPS foes start where they really are; demo foes
+    // get a far spawn so they walk in from ~40 m).
+    if(u.appDist===undefined){
+      u.appDist = G.demo ? 40 : Math.max(trueDist, 15);   // always walk in from a visible distance
     }
-    const k=renderDist/Math.max(bLen,0.001);
-    const localE=bE*k, localN=bN*k;
-    // heading is clockwise-from-north. Bearing east = +x, north = -z (forward).
-    const x= localE*Math.cos(head)-localN*Math.sin(head);
-    const z=-(localN*Math.cos(head)+localE*Math.sin(head));
-    const tx=camera.position.x+x, tz=camera.position.z+z;
-    // The Veil: while invisible, every non-dead enemy loses you and returns to idle.
-    if(G.invisible && u.state==="active" && u.state!=="dead"){
-      u.state="idle"; u._wind=false;
-      if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}
+    // Veil cancels pursuit
+    if(G.invisible && u.state==="active"){u.state="idle";u._wind=false;
+      if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}}
+    // engage when within pursuit range (use appDist so it's the *visible* distance), after grace
+    if(!inGrace && !G.invisible && u.state!=="active" && u.state!=="dead" && u.appDist<PURSUE_R){
+      u.state="active"; if(u.boss&&!u.introDone)bossIntro(e);
     }
-    // engage when within pursuit range — but not during the spawn grace, and not veiled
-    if(!inGrace && !G.invisible && u.state!=="active" && u.state!=="dead" && renderDist<PURSUE_R){
-      u.state="active";
-      // seed at a VISIBLE distance, SPREAD by a per-enemy bearing offset so a whole pack
-      // doesn't stack on the same point in front of you.
-      let sdx=tx-camera.position.x, sdz=tz-camera.position.z;
-      let sd=Math.hypot(sdx,sdz);
-      if(sd<0.001){
-        const fx=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
-        sdx=fx.x; sdz=fx.z; sd=Math.hypot(sdx,sdz)||1;
-      }
-      // rotate this enemy's seed bearing by a stable per-entity angle so they fan out
-      if(u.spread===undefined)u.spread=(Math.random()*2-1)*0.9; // ±0.9 rad
-      const ca=Math.cos(u.spread), sa=Math.sin(u.spread);
-      let bx=(sdx*ca - sdz*sa)/sd, bz=(sdx*sa + sdz*ca)/sd;
-      const SEED=Math.max(6, FIGHT_DIST+2) + Math.random()*2; // 6–8 m, varied
-      e.position.set(camera.position.x+bx*SEED, currentFloorY()+(u.fly?u.fly:0), camera.position.z+bz*SEED);
-      if(u.boss&&!u.introDone)bossIntro(e);
+    // ---- decide the target distance ----
+    let targetDist;
+    if(u.state==="active"){
+      targetDist = u.boss?6.0:(u.fly?4.5:FIGHT_DIST);   // close in to the fight ring
+    } else {
+      // idle: rest at true distance (compressed beyond 25 m), but never nearer than MIN_DIST
+      targetDist = trueDist<=25?trueDist:25+(trueDist-25)*0.35;
+      targetDist = Math.max(targetDist, 6.0);
     }
-    // disengage only if you walk far beyond pursuit range
-    if(u.state==="active"&&dist>PURSUE_R*1.3){u.state="idle";if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}}
-    if(u.state==="idle"){
-      const moved=Math.hypot(tx-e.position.x,tz-e.position.z);
-      e.position.x+=(tx-e.position.x)*Math.min(1,dt*4);
-      e.position.z+=(tz-e.position.z)*Math.min(1,dt*4);
-      e.position.y=G.floorY+(u.fly?u.fly:0);
-      if(u.hasClips){ locomotion(e, moved>0.05, false); }
+    // ease appDist toward target; approach speed scales with the enemy's speed when chasing
+    const closeRate = (u.state==="active") ? (u.speed*1.6+0.4) : 4.0; // m/s
+    if(u.appDist>targetDist) u.appDist = Math.max(targetDist, u.appDist - closeRate*dt);
+    else                     u.appDist = Math.min(targetDist, u.appDist + closeRate*dt);
+    // HARD floor: never, ever render closer than the fight ring (minus a hair for fly)
+    const HARD_MIN = u.boss?6.0:(u.fly?4.5:FIGHT_DIST);
+    if(u.appDist < HARD_MIN) u.appDist = HARD_MIN;
+    // ---- convert (bearing, appDist) → world position around the camera ----
+    // bearing is clockwise-from-north; relative to your facing (head). east=+x, north=-z.
+    const rel = u.bearing - head;
+    const ex = Math.sin(rel) * u.appDist;
+    const ez = -Math.cos(rel) * u.appDist;
+    const tx = camera.position.x + ex, tz = camera.position.z + ez;
+    // smooth horizontal move to target, snap-follow vertical to the live floor
+    const lerp = (u.state==="active")?Math.min(1,dt*6):Math.min(1,dt*4);
+    e.position.x += (tx-e.position.x)*lerp;
+    e.position.z += (tz-e.position.z)*lerp;
+    const ty = FLOOR + (u.fly?Math.min(u.fly,0.9):0);
+    e.position.y += (ty-e.position.y)*Math.min(1,dt*6);
+    e.lookAt(camera.position.x, e.position.y, camera.position.z);
+    // ---- animation + combat ----
+    if(u.state==="dead"){
+      // death anim playing; hold
+    } else if(u.state==="active"){
+      if(u.hasClips) locomotion(e, u.appDist>HARD_MIN+0.3, u.appDist>HARD_MIN+0.3);
       else animEnemy(e,dt,clock.elapsedTime);
-      e.lookAt(camera.position.x,e.position.y,camera.position.z);
-    }else if(u.state==="dead"){
-      // playing death anim; hold position, let mixer finish
-    }else{ // active: combat AI owns motion (chases the camera directly)
-      if(u.boss)bossThink(e,dt);else enemyThink(e,dt);
+      if(u.boss) bossCombat(e,dt); else enemyCombat(e,dt);
+    } else {
+      if(u.hasClips) locomotion(e, Math.abs(u.appDist-targetDist)>0.2, false);
+      else animEnemy(e,dt,clock.elapsedTime);
+    }
+    // disengage if you get far away (in true GPS metres)
+    if(u.state==="active" && trueDist>PURSUE_R*1.3 && !G.demo){
+      u.state="idle"; if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}
+    }
+    if(G._dbgOn && u.state==="active" && (!G._dbgT||performance.now()-G._dbgT>1000)){
+      G._dbgT=performance.now();
+      log("DBG",u.kind||"?","app=",u.appDist.toFixed(1),"true=",trueDist.toFixed(1),
+        "eY=",e.position.y.toFixed(2),"floor=",FLOOR.toFixed(2),"xr=",!!G.xr);
     }
   }
   // engagement music / hint
@@ -2313,11 +2323,9 @@ function bossAnim(b,dt,t){
     const a=t*1.6+i*Math.PI*2/3;o.position.set(Math.cos(a)*.9,1.5+Math.sin(t*2+i)*.2,Math.sin(a)*.9);});
   if(b.userBreath){const f=b.userBreath;f.flame.scale.setScalar(.8+Math.random()*.7);f.children[1].intensity=.5+Math.random();}
 }
-function bossThink(b,dt){
-  const u=b.userData,d=b.position.distanceTo(camera.position);
-  b.lookAt(camera.position.x,0,camera.position.z);
-  if(!u.hasClips)bossAnim(b,dt,clock.elapsedTime);
-  // phase transitions
+function bossCombat(b,dt){
+  // positioning handled by updateWorld; this is phases + combo swings only.
+  const u=b.userData,d=Math.hypot(camera.position.x-b.position.x,camera.position.z-b.position.z);
   const frac=u.hp/u.hpMax;
   const ph=frac>.66?0:frac>.33?1:2;
   if(ph!==u.phase){u.phase=ph;u.speed+=.25;u.dmg+=4;
@@ -2325,9 +2333,8 @@ function bossThink(b,dt){
     Dlg.say([`Phase ${ph+1} — ${p.name}. ${p.taunt}`]);
     if(u.hasClips&&u.animSet&&u.animSet.clips.roar&&u.animSet.clips.roar.length)playRole(b,"roar");
     shockwave(b.position);}
-  if(u.combo.length){ // executing a combo
+  if(u.combo.length){
     u.comboT-=dt;
-    if(!u.hasClips)flash(b,u.comboT<.25?0xff5533:0xffaa33);
     if(u.comboT<=0){
       const [,kind]=u.combo.shift();
       if(d< (kind==="wave"?8:6.2)) hurtPlayer(u.dmg*(kind==="slam"?1.5:1),kind);
@@ -2337,23 +2344,11 @@ function bossThink(b,dt){
     }
     return;
   }
-  const bdx=camera.position.x-b.position.x,bdz=camera.position.z-b.position.z;
-  const bHoriz=Math.hypot(bdx,bdz);
-  const bTargetY=currentFloorY()+(G.legend.boss.type==="wraith"?0.35:0);
-  b.position.y+=(bTargetY-b.position.y)*Math.min(1,dt*4);
-  const bStop=6.0;                            // bosses are big — keep them framed
-  let bux=-bdx,buz=-bdz,bul=bHoriz;
-  if(bul<0.001){const fx=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);bux=fx.x;buz=fx.z;bul=Math.hypot(bux,buz)||1;}
-  bux/=bul;buz/=bul;
-  if(bHoriz>bStop){const inv=1/(bHoriz||1);b.position.x+=bdx*inv*u.speed*dt;b.position.z+=bdz*inv*u.speed*dt;
-    locomotion(b,true,true);}
-  else { b.position.x=camera.position.x+bux*bStop; b.position.z=camera.position.z+buz*bStop; locomotion(b,false,false); }
-  if(u.world)syncEntityGPS(b);
   u.cd-=dt;
-  if(u.cd<=0&&d<7){
+  if(u.cd<=0 && d<8){
     u.combo=COMBOS[Math.min(COMBOS.length-1,Math.floor(Math.random()*(2+u.phase)))].slice();
     u.comboT=u.combo[0][0]/(1+u.phase*.3);
-    if(u.hasClips)attackAnim(b);              // first swing of the combo
+    if(u.hasClips)attackAnim(b);
   }
 }
 function animEnemy(e,dt,t){
@@ -2380,48 +2375,21 @@ function animEnemy(e,dt,t){
     case "heavy": e.position.y=Math.abs(Math.sin(t*3+ph))*.03;break;
   }
 }
-function enemyThink(e,dt){
+function enemyCombat(e,dt){
+  // movement/positioning is handled by updateWorld; this only swings & lands hits.
   const u=e.userData;
-  e.lookAt(camera.position.x,u.fly?camera.position.y:0,camera.position.z);
-  // stand on the LIVE floor every frame (no stale captured height → no floating)
-  const targetY=currentFloorY()+(u.fly?Math.min(u.fly,0.9):0);
-  e.position.y+=(targetY-e.position.y)*Math.min(1,dt*6);
-  if(!u.hasClips)animEnemy(e,dt,clock.elapsedTime);
-  const stop = u.fly?3.0:FIGHT_DIST;          // keep enough distance to be seen
-  // mid-attack: hold position; land the hit partway through the swing
-  if(u.state==="windup"||(u.state==="active"&&u._wind)){
-    u.cd-=dt;if(!u.hasClips)flash(e,0xff7744);
-    if(u.cd<=0){const hd=Math.hypot(camera.position.x-e.position.x,camera.position.z-e.position.z);
-      if(hd<HIT_REACH)hurtPlayer(u.dmg,"slash");u._wind=false;u.cd=rand(1.4,2.6);}
+  const dHoriz=Math.hypot(camera.position.x-e.position.x,camera.position.z-e.position.z);
+  if(u._wind){
+    u.cd-=dt;
+    if(u.cd<=0){ if(dHoriz<HIT_REACH)hurtPlayer(u.dmg,"slash"); u._wind=false; u.cd=rand(1.4,2.6); }
     return;
   }
-  let dx=camera.position.x-e.position.x, dz=camera.position.z-e.position.z;
-  let dHoriz=Math.hypot(dx,dz);
-  // unit bearing from player to enemy (stable even if it's on top of you)
-  let ux=-dx, uz=-dz, ul=dHoriz;
-  if(ul<0.001){ const fx=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion); ux=fx.x; uz=fx.z; ul=Math.hypot(ux,uz)||1; }
-  ux/=ul; uz/=ul;
-  if(dHoriz>stop){
-    // approach smoothly toward the fight ring
-    const inv=1/(dHoriz||1);
-    e.position.x+=dx*inv*u.speed*1.4*dt;
-    e.position.z+=dz*inv*u.speed*1.4*dt;
-    locomotion(e,true,true);
-  } else {
-    // at/within the ring: HARD-pin to exactly the fight distance along its bearing,
-    // so it can never sit in your face regardless of how you moved (incl. demo walk).
-    e.position.x=camera.position.x+ux*stop;
-    e.position.z=camera.position.z+uz*stop;
-    locomotion(e,false,false);
-  }
-  dHoriz=Math.hypot(camera.position.x-e.position.x,camera.position.z-e.position.z);
   u.cd-=dt;
-  if(u.cd<=0&&dHoriz<HIT_REACH){
+  if(u.cd<=0 && dHoriz<HIT_REACH+0.5){
     u._wind=true;
     const dur=attackAnim(e);
     u.cd=dur?dur*0.45:0.6;
   }
-  if(u.world)syncEntityGPS(e);
 }
 function locomotion(e,moving,running){
   const u=e.userData;if(!u.hasClips||!u.animSet)return;
