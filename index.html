@@ -16,7 +16,7 @@
   html,body{width:100%;height:100%;overflow:hidden;background:var(--void);color:var(--parchment);
     font-family:Georgia,'Times New Roman',serif}
   #c{position:fixed;inset:0;display:block}
-  .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:auto;
     background:radial-gradient(ellipse at 50% 30%,#1c1830 0%,var(--void) 70%);z-index:50;padding:24px;text-align:center}
   .hidden{display:none!important}
   h1.title{font-size:clamp(28px,8vw,56px);letter-spacing:.18em;text-transform:uppercase;
@@ -24,6 +24,8 @@
   .subtitle{letter-spacing:.4em;text-transform:uppercase;font-size:11px;color:var(--arcane);margin-top:10px}
   .rune-divider{width:160px;height:1px;background:linear-gradient(90deg,transparent,var(--thunder),transparent);margin:22px auto;position:relative}
   .rune-divider::after{content:"✦";position:absolute;left:50%;top:-9px;transform:translateX(-50%);color:var(--thunder);font-size:12px}
+  button,select,input{touch-action:manipulation;cursor:pointer}
+  button.btn,button.ctl,.bchip{cursor:pointer}
   button.btn{background:transparent;border:1px solid var(--thunder);color:var(--thunder);
     font-family:inherit;letter-spacing:.25em;text-transform:uppercase;font-size:13px;
     padding:14px 34px;cursor:pointer;margin:8px;transition:all .25s;position:relative}
@@ -776,12 +778,14 @@ const Dlg = {
     else this.next();
   }
 };
-$("dlg").addEventListener("pointerdown",e=>{e.stopPropagation();Dlg.tap();});
-addEventListener("pointerdown",e=>{
-  if($("dlg").style.display!=="block")return;
-  if(e.target.closest("button,#inv,#dlg,.screen,input"))return;
+$("dlg").addEventListener("click",e=>{e.stopPropagation();Dlg.tap();});
+// advance dialogue by tapping empty space — NON-capture, gated to when dialogue is open,
+// and never when the tap is on any interactive element.
+document.addEventListener("click",e=>{
+  const dlg=$("dlg"); if(!dlg||dlg.style.display!=="block")return;
+  if(e.target.closest("button,select,input,a,.bchip,.slotrow,.item,.statrow,#inv,#dlg,#dbg,#dbgBtn"))return;
   Dlg.tap();
-},true);
+});
 
 /* =====================================================================
    1. GEOLOCATION + OSM POINTS OF INTEREST
