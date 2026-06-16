@@ -26,6 +26,11 @@
   .rune-divider::after{content:"✦";position:absolute;left:50%;top:-9px;transform:translateX(-50%);color:var(--thunder);font-size:12px}
   button,select,input{touch-action:manipulation;cursor:pointer}
   button.btn,button.ctl,.bchip{cursor:pointer}
+  #btnVeil.on{background:rgba(110,92,196,.45);box-shadow:0 0 16px rgba(140,120,255,.7);color:#dcd0ff}
+  #veilTint{position:fixed;inset:0;pointer-events:none;z-index:25;opacity:0;transition:opacity .25s;
+    background:radial-gradient(ellipse at 50% 50%,rgba(110,92,196,0) 40%,rgba(80,60,160,.28) 100%);
+    box-shadow:inset 0 0 120px rgba(120,100,220,.35)}
+  #veilTint.on{opacity:1}
   button.btn{background:transparent;border:1px solid var(--thunder);color:var(--thunder);
     font-family:inherit;letter-spacing:.25em;text-transform:uppercase;font-size:13px;
     padding:14px 34px;cursor:pointer;margin:8px;transition:all .25s;position:relative}
@@ -278,6 +283,7 @@
 </div>
 
 <div id="brightOverlay"></div>
+<div id="veilTint"></div>
 
 <!-- ============ BESTIARY ============ -->
 <div id="bestiaryScreen" class="screen hidden" style="z-index:46;justify-content:flex-start;padding-top:max(20px,env(safe-area-inset-top))">
@@ -339,6 +345,7 @@
     <button class="ctl big" id="btnAtk" data-i18n="strike">Strike</button>
     <button class="ctl" id="btnSpecial" data-i18n="scroll">Scroll</button>
     <button class="ctl" id="btnDodge" data-i18n="dodge">Dodge</button>
+    <button class="ctl" id="btnVeil" data-i18n="veil">Veil</button>
   </div>
   <div id="leftctl">
     <button class="ctl" id="btnInv" data-i18n="satchel">Satchel</button>
@@ -377,6 +384,7 @@ const $ = id => document.getElementById(id);
 /* ===================== i18n (EN / ES) ===================== */
 const I18N={
   en:{
+    veil:"Veil", veil_on:"Veiled — they cannot see you", veil_off:"The veil fades", veil_nomp:"No magic left to veil",
     gear_before:"Before you walk —",
     gear_judged:"The Herald has judged the land between your waypoints",
     gear_clothing:"Clothing", gear_carry:"Carry", gear_transport:"Travel between spots",
@@ -420,6 +428,7 @@ const I18N={
     world_recentered:"World recentered",
   },
   es:{
+    veil:"Velo", veil_on:"Velado — no pueden verte", veil_off:"El velo se disipa", veil_nomp:"Sin magia para el velo",
     gear_before:"Antes de caminar —",
     gear_judged:"El Heraldo ha juzgado la tierra entre tus puntos",
     gear_clothing:"Ropa", gear_carry:"Lleva", gear_transport:"Viaje entre puntos",
@@ -727,7 +736,7 @@ $("btnConfirmYes").onclick=()=>{hide("confirmScreen");const c=_confirmCb;_confir
 $("btnConfirmNo").onclick=()=>{hide("confirmScreen");_confirmCb=null;};
 
 /* pause menu */
-function openPause(){G._paused=true;show("pauseScreen");}
+function openPause(){endVeil();G._paused=true;show("pauseScreen");}
 function closePause(){G._paused=false;hide("pauseScreen");}
 $("btnMenu") && ($("btnMenu").onclick=()=>{Audio.sfx("ui");openPause();});
 $("btnResume").onclick=()=>{Audio.sfx("ui");closePause();};
@@ -740,7 +749,7 @@ $("btnPauseMenu").onclick=()=>{ // leave without saving — confirm to avoid los
 
 /* tear down the live game and show the title screen */
 function exitToMenu(){
-  G._paused=false;
+  G._paused=false;G.invisible=false;if($("btnVeil"))$("btnVeil").classList.remove("on");if($("veilTint"))$("veilTint").classList.remove("on");
   // stop XR session if active
   try{ if(G.xr&&renderer.xr.getSession){renderer.xr.getSession().end();} }catch(e){}
   // hide all overlays
@@ -1998,8 +2007,10 @@ function sampleHitTest(xrFrame){
   }catch(e){/* frame without hit-test, ignore */}
 }
 G.worldBuilt=false;
-const ENGAGE_R=20;      // rendered-metres: enemy becomes active/aggressive
+const ENGAGE_R=20;      // rendered-metres: close enough to attack
+const PURSUE_R=70;      // rendered-metres: enemy spots you and gives chase
 const VISIBLE_R=80;     // metres: enemy mesh is in the scene at all
+G.invisible=false;      // Veil spell active → enemies cannot see you
 function offsetLatLon(lat,lon,dN,dE){const {mlat,mlon}=metersPerDeg(lat);
   return [lat+dN/mlat, lon+dE/mlon];}
 function makeWorldEnemy(type,lat,lon){
@@ -2078,20 +2089,26 @@ function updateWorld(dt){
     const x= localE*Math.cos(head)-localN*Math.sin(head);
     const z=-(localN*Math.cos(head)+localE*Math.sin(head));
     const tx=camera.position.x+x, tz=camera.position.z+z;
-    // engage by RENDERED proximity so what looks close IS fightable
-    if(u.state!=="active"&&renderDist<ENGAGE_R){
-      u.state="active";
-      const fl=currentFloorY();                 // hit-test floor if available, else fallback
-      u.groundY=fl;                              // remember real ground for this entity
-      const fx=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);fx.y=0;fx.normalize();
-      e.position.set(camera.position.x+fx.x*Math.min(renderDist,4),
-                     fl+(u.fly?Math.min(u.fly,0.9):0),
-                     camera.position.z+fx.z*Math.min(renderDist,4));
-      if(u.boss&&!u.introDone)bossIntro(e);
-      if(G.hitFloorY!=null)log("engage: planted on hit-test floor y=",fl.toFixed(2));
+    // The Veil: while invisible, every non-dead enemy loses you and returns to idle.
+    if(G.invisible && u.state==="active" && u.state!=="dead"){
+      u.state="idle"; u._wind=false;
+      if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}
     }
-    // disengage only if you really walk off (GPS distance, not render)
-    if(u.state==="active"&&dist>ENGAGE_R*2.2){u.state="idle";if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}}
+    // engage when you come within pursuit range (visual sight), unless you're veiled
+    if(!G.invisible && u.state!=="active" && u.state!=="dead" && renderDist<PURSUE_R){
+      u.state="active";
+      const fl=currentFloorY();
+      u.groundY=fl;
+      if(renderDist<ENGAGE_R){ // pop close ones right in front; distant ones keep their spot and run in
+        const fx=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);fx.y=0;fx.normalize();
+        e.position.set(camera.position.x+fx.x*Math.min(renderDist,4),
+                       fl+(u.fly?Math.min(u.fly,0.9):0),
+                       camera.position.z+fx.z*Math.min(renderDist,4));
+      }
+      if(u.boss&&!u.introDone)bossIntro(e);
+    }
+    // disengage only if you walk far beyond pursuit range
+    if(u.state==="active"&&dist>PURSUE_R*1.3){u.state="idle";if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}}
     if(u.state==="idle"){
       const moved=Math.hypot(tx-e.position.x,tz-e.position.z);
       e.position.x+=(tx-e.position.x)*Math.min(1,dt*4);
@@ -2728,7 +2745,7 @@ function bossDown(){
   show("winScreen");$("hud").style.display="none";
 }
 function playerDie(){
-  clearEncounter();$("hud").style.display="none";show("deathScreen");
+  endVeil();clearEncounter();$("hud").style.display="none";show("deathScreen");
 }
 $("btnRespawn").onclick=()=>{
   hide("deathScreen");
@@ -3093,6 +3110,11 @@ function loop(time,xrFrame){
     const f=G.player.st/G.player.stMax;
     G.player.st=clamp(G.player.st+dt*(24+24*f),0,G.player.stMax);
   }
+  if(G.invisible){                         // the Veil drains MP while held
+    G.player.mp=clamp(G.player.mp-dt*VEIL_DRAIN,0,G.player.mpMax);
+    updBars();
+    if(G.player.mp<=0) endVeil();
+  }
   if((compassT+=dt)>0.5){compassT=0;updCompass();updBars();
     refreshRespawns(G.lat,G.lon);
     checkSpotProgress();
@@ -3287,6 +3309,29 @@ function walkStep(){
   G.lat+=Math.cos(br*Math.PI/180)*step/mlat;
   G.lon+=Math.sin(br*Math.PI/180)*step/mlon;
   G._gpsTarget={lat:G.lat,lon:G.lon};   // keep smoother in sync (no fighting in demo)
+}
+/* ---- The Veil: hold to be invisible to enemies; drains MP; ends on release or empty MP ---- */
+const VEIL_DRAIN=10;     // MP per second while veiled
+function startVeil(){
+  if(G.invisible)return;
+  if(G.player.mp<=2){toast(t("veil_nomp"),1200);return;}
+  G.invisible=true;
+  $("btnVeil").classList.add("on");$("veilTint").classList.add("on");
+  Audio.sfx("ui");toast(t("veil_on"),1200);
+}
+function endVeil(){
+  if(!G.invisible)return;
+  G.invisible=false;
+  $("btnVeil").classList.remove("on");$("veilTint").classList.remove("on");
+  toast(t("veil_off"),900);
+}
+const _vb=$("btnVeil");
+if(_vb){
+  _vb.addEventListener("pointerdown",e=>{e.preventDefault();startVeil();});
+  _vb.addEventListener("pointerup",e=>{e.preventDefault();endVeil();});
+  _vb.addEventListener("pointerleave",endVeil);
+  _vb.addEventListener("pointercancel",endVeil);
+  addEventListener("pointerup",()=>{if(G.invisible)endVeil();}); // safety: release anywhere ends it
 }
 const _wb=$("btnWalk");
 _wb.addEventListener("pointerdown",e=>{e.preventDefault();walkStep();_walkHold=setInterval(walkStep,420);});
