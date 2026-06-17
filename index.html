@@ -1896,33 +1896,51 @@ function clipFileFor(spec, role, label){
   return spec.prefix+label+spec.suffix;
 }
 const _clipInFlight={};
-/* Remove root-motion: delete .position tracks targeting the armature/root/hips bone, which
-   in Meshy clips relocates the whole model to the clip's origin (landing it on the camera).
-   Limb rotation tracks are untouched, so the animation still plays fully. */
-function stripRootMotion(clip, scene){
+/* Remove animation-driven translation.
+   IMPORTANT: Meshy multi-animation GLBs often contain .position tracks on many bones/nodes.
+   Even when the world holder is correctly placed 30-50 m away, those tracks can pull the
+   visible skinned mesh back toward the clip origin, which looks like feet/body glued to the lens.
+
+   For safety we now drop EVERY position track from EVERY loaded enemy/boss clip, including
+   single-walk and multi-animation enemies. Rotation/quaternion/scale/morph tracks are kept, so walk/attack/hit still animate, but no clip
+   is allowed to translate any part of the rig or model through space. */
+function stripRootMotion(clip, scene, opts={}){
   if(!clip||!clip.tracks)return;
-  // find candidate root node names: the top-level child of the scene + anything called
-  // hips/root/armature/pelvis.
+  const dropAllPositionTracks = !!opts.dropAllPositionTracks;
+  const before = clip.tracks.length;
+  let dropped = 0;
+
+  // fallback root-only set for single-walk files where we do not need the nuclear option
   const rootNames=new Set();
   if(scene){
     scene.traverse&&scene.traverse(o=>{
       const n=(o.name||"").toLowerCase();
       if(/hip|pelvis|root|armature|spine_?0|mixamorig:?hips/.test(n)) rootNames.add(o.name);
     });
-    // also the first object with children directly under scene
     if(scene.children&&scene.children[0]) rootNames.add(scene.children[0].name);
   }
+
+  function isPositionTrack(name){
+    // Handles "Bone.position", "Bone.position[x]", and odd exporter forms containing .position.
+    return !!name && (/\.position(?:$|\[|\.)/.test(name) || name.endsWith(".position"));
+  }
+
   clip.tracks=clip.tracks.filter(tr=>{
-    if(tr.name && tr.name.endsWith(".position")){
-      const node=tr.name.slice(0, tr.name.lastIndexOf("."));
-      // drop position track if it targets a root-ish node
-      const bare=node.indexOf("/")>=0?node.slice(node.lastIndexOf("/")+1):node;
-      if(rootNames.has(node)||rootNames.has(bare)) return false;
-      // also drop any position track at the very top of the hierarchy by heuristic name
-      if(/hip|pelvis|root|armature|mixamorig:?hips/i.test(bare)) return false;
+    const name=tr&&tr.name||"";
+    if(!isPositionTrack(name)) return true;
+
+    if(dropAllPositionTracks){ dropped++; return false; }
+
+    const node=name.slice(0, name.lastIndexOf("."));
+    const bare=node.indexOf("/")>=0?node.slice(node.lastIndexOf("/")+1):node;
+    if(rootNames.has(node)||rootNames.has(bare)||/hip|pelvis|root|armature|mixamorig:?hips/i.test(bare)){
+      dropped++; return false;
     }
     return true;
   });
+
+  if(clip.resetDuration) clip.resetDuration();
+  clip.userData=Object.assign({},clip.userData||{}, {positionTracksDropped:dropped, tracksBefore:before, tracksAfter:clip.tracks.length});
 }
 function loadAnimClips(key){
   if(ClipCache[key]!==undefined)return Promise.resolve(ClipCache[key]);
@@ -1941,7 +1959,7 @@ async function _loadAnimClips(key){
     const url=animURL(spec.folder,spec.walkFile);
     await new Promise(res=>{ loader.load(url,g=>{
       const c=g.animations&&g.animations[0];
-      if(c){ c.userData={label:spec.walkFile}; stripRootMotion(c,g.scene); out.walk.push(c); }
+      if(c){ c.userData={label:spec.walkFile}; stripRootMotion(c,g.scene,{dropAllPositionTracks:true}); log("anim strip",key,spec.walkFile,"posDropped=",c.userData.positionTracksDropped||0,"tracks",c.userData.tracksAfter,"/",c.userData.tracksBefore); out.walk.push(c); }
       out.model=g.scene; res();
     },undefined,()=>{log("anim miss:",key,spec.walkFile);res();}); });
     ClipCache[key]=out;return out;
@@ -1956,7 +1974,7 @@ async function _loadAnimClips(key){
         const url=animURL(spec.folder, spec.prefix+label+spec.suffix);
         seen[label]=await new Promise(res=>{ loader.load(url,g=>{
           const c=g.animations&&g.animations[0];
-          if(c){ c.userData={label}; stripRootMotion(c, g.scene); }
+          if(c){ c.userData={label}; stripRootMotion(c, g.scene,{dropAllPositionTracks:true}); log("anim strip",key,label,"posDropped=",c.userData.positionTracksDropped||0,"tracks",c.userData.tracksAfter,"/",c.userData.tracksBefore); }
           if(!out.model)out.model=g.scene;   // first rigged scene becomes the base model
           res(c||null);
         },undefined,()=>{log("anim miss:",key,label);res(null);}); });
@@ -2053,9 +2071,22 @@ function applyModel(holder,baseScene,key){
       }
     }
   }
+  // Hard pose-lock for translations: store EVERY local position in the upgraded rig/model.
+  // This is stronger than stripping .position tracks: even if an exporter uses an odd track name
+  // or the mixer still touches a node's translation, the frame loop restores positions after
+  // mixer.update(). Rotations/quaternions keep animating, but no child mesh/bone can translate
+  // itself back into the camera/lens.
+  const posLocks=[];
+  root.traverse&&root.traverse(o=>{
+    if(o && o.position) posLocks.push({o, p:o.position.clone()});
+  });
+  holder.userData._posLocks=posLocks;
+  holder.userData._modelRoot=root;
+  holder.userData._modelRootPos=root.position.clone();
   // remember the inner rigged node + its planted local transform for per-frame re-anchoring
   const inner=root.children&&root.children[0]?root.children[0]:null;
   if(inner){ holder.userData._inner=inner; holder.userData._innerPos=inner.position.clone(); }
+  log("pose-lock",key,"nodes=",posLocks.length);
   holder.userData.animSet=set;
   holder.userData.hasClips=bound>0;
   holder.userData.walkOnly = !!(ANIM[key] && ANIM[key].walkFile);
@@ -2375,7 +2406,7 @@ function updateWorld(dt){
     }
     // If GPS says an enemy is illegally close, repair its anchor immediately. This is
     // the hard anti-lens guard for new pilgrimages and bad heat-cluster scatters.
-    if(!u.boss && (trueDist < HARD_MIN-0.25 || (u.state!=="active" && trueDist < SAFE_SPAWN_MIN))){
+    if(!u.boss && trueDist < HARD_MIN-0.25){
       const br=(u.bearing!==undefined)?u.bearing:Math.random()*Math.PI*2;
       const safe=Math.max(SAFE_SPAWN_MIN,HARD_MIN+8);
       u.lat=G.lat+Math.cos(br)*safe/mlat;
@@ -3426,15 +3457,19 @@ function loop(time,xrFrame){
     let alive=false,p=r;while(p){if(p===scene||p===bestScene){alive=true;break;}p=p.parent;}
     if(alive)mx.update(dt);else MIXERS.splice(i,1);
   }
-  // re-anchor rigged models: cancel any residual root translation from the clips
-  for(const e of G.world){const u=e.userData; if(u&&u._inner&&u._innerPos){
-    u._inner.position.x=u._innerPos.x; u._inner.position.z=u._innerPos.z;
-    // keep feet on the floor too (let Y be driven by placement, not the clip)
-    u._inner.position.y=u._innerPos.y;
-  }}
-  if(G.boss&&G.boss.userData&&G.boss.userData._inner&&G.boss.userData._innerPos){
-    const b=G.boss.userData; b._inner.position.copy(b._innerPos);
+  // re-anchor rigged models: cancel any residual translation from clips/exporter/bind roots.
+  // This restores EVERY stored local position after mixer.update(), so animation cannot drag
+  // the visible feet/body to the camera even if a .position track escaped filtering.
+  function restorePosLocks(ent){
+    const u=ent&&ent.userData; if(!u)return;
+    if(u._posLocks){
+      for(const L of u._posLocks){ if(L&&L.o&&L.p) L.o.position.copy(L.p); }
+    }else if(u._inner&&u._innerPos){
+      u._inner.position.copy(u._innerPos);
+    }
   }
+  for(const e of G.world) restorePosLocks(e);
+  if(G.boss) restorePosLocks(G.boss);
   handSwing(dt);
   renderer.render(scene,camera);
  }catch(err){
