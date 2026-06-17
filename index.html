@@ -1256,7 +1256,8 @@ function refreshRespawns(lat,lon){
       cl.cleared=false;cl.clearedAt=0;cl.count=dangerCount(cl);changed=true;
       if(G.worldBuilt){const n=cl.count;for(let i=0;i<n;i++){
         const type=pickClusterType(cl);const ang=Math.random()*6.28,rad=rand(4,18);
-        const [elat,elon]=offsetLatLon(cl.lat,cl.lon,Math.sin(ang)*rad,Math.cos(ang)*rad);
+        let [elat,elon]=offsetLatLon(cl.lat,cl.lon,Math.sin(ang)*rad,Math.cos(ang)*rad);
+        [elat,elon]=safeSpawnLatLon(elat,elon);
         makeWorldEnemy(type,elat,elon).userData.cluster=cl;}}
     }
   }
@@ -1274,35 +1275,43 @@ function cellAt(lat,lon){
 let _liveSpawnT=0;
 function liveSpawnNearby(){
   if(G.lat==null||G.demo)return;
+  if(G._worldSpawnAllowedAt && performance.now()<G._worldSpawnAllowedAt)return;
   const {mlat,mlon}=metersPerDeg(G.lat);
-  // Decide local danger from BOTH the cell you stand in and the nearest cluster centre.
+  // Use the heat map as authority. Do NOT keep a fake minimum pack around the player:
+  // if the current map cell is cold, the correct behaviour is no sudden spawn.
   const cell=cellAt(G.lat,G.lon);
   let heat=cell?(cell.heat||0):0, biome=cell?cell.biome:null;
   let best=null,bd=1e9;
   for(const cl of HEAT.clusters){ const d=haversine(G.lat,G.lon,cl.lat,cl.lon);
     if(d<bd){bd=d;best=cl;} }
-  if(best && bd<150){ if((best.heat||0)>heat){heat=best.heat||0; biome=best.biome;} } // nearby cluster counts
-  // how many enemies are within sight right now?
+  if(best && bd<140 && (best.heat||0)>heat){heat=best.heat||0; biome=best.biome;}
+  if(heat<LIVE_MIN_HEAT){
+    if(G._dbgOn) log("live-check: cold cell · no live spawn · heat=",heat.toFixed(2),"cell=",!!cell,"nearestCl=",bd<9999?bd.toFixed(0)+"m":"none");
+    return;
+  }
+  // Count only safe visible foes. A foe inside the hard personal-space ring does NOT satisfy
+  // the spawn quota; it is a bug candidate and updateWorld will push it out.
   let nearby=0;
-  for(const e of G.world){ if(e.userData.boss)continue;
-    const dd=Math.hypot((e.userData.lat-G.lat)*mlat,(e.userData.lon-G.lon)*mlon);
-    if(dd<VISIBLE_R)nearby++; }
-  // always keep at least a couple of foes around while exploring; more in hotter areas
-  const want = heat>=0.66?5 : heat>=0.33?4 : heat>=0.12?3 : 2;
+  for(const e of G.world){ const u=e.userData; if(!u||u.boss||u.dead)continue;
+    const dd=Math.hypot((u.lat-G.lat)*mlat,(u.lon-G.lon)*mlon);
+    if(dd>=SAFE_SPAWN_MIN*0.55 && dd<VISIBLE_R)nearby++; }
+  const want = heat>=0.66?5 : heat>=0.33?3 : 1;
   if(G._dbgOn) log("live-check: nearby=",nearby,"want=",want,"heat=",heat.toFixed(2),"cell=",!!cell,"nearestCl=",bd<9999?bd.toFixed(0)+"m":"none");
   if(nearby>=want)return;
   const env=MICRO_TO_ENV[biome]||G.env||"town";
   const pool=BIOME_ENEMIES[env]||BIOME_ENEMIES.town;
   let made=0;
   for(let i=nearby;i<want;i++){
-    const ang=Math.random()*6.28, rad=rand(18,45);
-    const [elat,elon]=offsetLatLon(G.lat,G.lon,Math.sin(ang)*rad,Math.cos(ang)*rad);
+    const ang=Math.random()*6.28, rad=rand(SAFE_SPAWN_MIN,SAFE_SPAWN_MAX);
+    const [elat,elon]=offsetLatLon(G.lat,G.lon,Math.cos(ang)*rad,Math.sin(ang)*rad);
     const e=makeWorldEnemy(choice(pool),elat,elon);
     e.userData.cluster={lat:G.lat,lon:G.lon,biome:biome||env,heat,env,cleared:false,clearedAt:0,_live:true};
+    e.userData.spawnGrace=performance.now()+SPAWN_GRACE_MS;
     made++;
   }
-  if(made)log("live-spawn:",made,"foes near you · biome:",biome||env,"· heat:",heat.toFixed(2));
+  if(made)log("live-spawn:",made,"foes at sight edge · biome:",biome||env,"· heat:",heat.toFixed(2),"· ring:",SAFE_SPAWN_MIN+"-"+SAFE_SPAWN_MAX+"m");
 }
+
 function nearestCluster(lat,lon){
   let best=null,bd=1e9;
   for(const cl of HEAT.clusters){if(cl.cleared)continue;
@@ -1898,7 +1907,7 @@ function stripRootMotion(clip, scene){
   if(scene){
     scene.traverse&&scene.traverse(o=>{
       const n=(o.name||"").toLowerCase();
-      if(/hip|hips|pelvis|root|armature|spine_?0|mixamorig:?hips|bip001|metarig|scene|motion/.test(n)) rootNames.add(o.name);
+      if(/hip|pelvis|root|armature|spine_?0|mixamorig:?hips/.test(n)) rootNames.add(o.name);
     });
     // also the first object with children directly under scene
     if(scene.children&&scene.children[0]) rootNames.add(scene.children[0].name);
@@ -1910,7 +1919,7 @@ function stripRootMotion(clip, scene){
       const bare=node.indexOf("/")>=0?node.slice(node.lastIndexOf("/")+1):node;
       if(rootNames.has(node)||rootNames.has(bare)) return false;
       // also drop any position track at the very top of the hierarchy by heuristic name
-      if(/hip|hips|pelvis|root|armature|mixamorig:?hips|bip001|metarig|scene|motion/i.test(bare)) return false;
+      if(/hip|pelvis|root|armature|mixamorig:?hips/i.test(bare)) return false;
     }
     return true;
   });
@@ -2184,16 +2193,33 @@ function sampleHitTest(xrFrame){
   }catch(e){/* frame without hit-test, ignore */}
 }
 G.worldBuilt=false;
-const ENGAGE_R=20;      // rendered-metres: enemy notices & turns aggressive
-const FIGHT_DIST=7.0;   // metres: where a melee enemy STOPS to fight (bigger personal space)
-const HIT_REACH=7.6;    // metres: how close it must be to land a blow (a bit > FIGHT_DIST)
-const PURSUE_R=45;      // metres: enemy gives chase once you are this close (you see them first)
-const VISIBLE_R=55;     // metres: only enemies in your nearby zone are drawn; rest appear as you walk in
-const FLY_MIN_DIST=6.0; // flying foes may hold a touch closer (they sit above the floor)
-const BOSS_MIN_DIST=8.0;// the boss keeps a wider ring so its large model stays fully in frame
+const ENGAGE_R=20;      // legacy UI/debug only
+const FIGHT_DIST=10.0;  // metres: melee enemies STOP here; never glued to the lens
+const HIT_REACH=10.9;   // metres: attack can land only around the fight ring
+const PURSUE_R=45;      // metres: enemy gives chase after being visible for a moment
+const VISIBLE_R=60;     // metres: enemies are first drawn at real world distance
+const FLY_MIN_DIST=9.0; // flying foes also keep real personal space
+const BOSS_MIN_DIST=13.0;// bosses keep a wider ring so large models stay fully in frame
+const SAFE_SPAWN_MIN=34; // no newly created foe may be closer than this to the player
+const SAFE_SPAWN_MAX=58; // live spawns appear near the edge of visibility, then walk in
+const SPAWN_GRACE_MS=6500; // visible-but-not-hostile grace after spawning/entering AR
+const LIVE_MIN_HEAT=0.12; // below this, do not fabricate nearby enemies
 G.invisible=false;      // Veil spell active → enemies cannot see you
 function offsetLatLon(lat,lon,dN,dE){const {mlat,mlon}=metersPerDeg(lat);
   return [lat+dN/mlat, lon+dE/mlon];}
+function safeSpawnLatLon(lat,lon,minR=SAFE_SPAWN_MIN,maxR=SAFE_SPAWN_MAX){
+  // If an enemy is created too close to the live player, push its GPS anchor out to
+  // a visible ring. This prevents heatmap clusters or live-spawns from appearing
+  // on the camera/lens at the start of a pilgrimage.
+  if(G.lat==null||G.lon==null||G.demo)return [lat,lon];
+  const {mlat,mlon}=metersPerDeg(G.lat);
+  const dN=(lat-G.lat)*mlat, dE=(lon-G.lon)*mlon;
+  const d=Math.hypot(dN,dE);
+  if(d>=minR)return [lat,lon];
+  let a=d>0.5?Math.atan2(dE,dN):Math.random()*Math.PI*2;
+  const r=rand(minR,maxR);
+  return offsetLatLon(G.lat,G.lon,Math.cos(a)*r,Math.sin(a)*r);
+}
 function makeWorldEnemy(type,lat,lon){
   const st=ENEMY_STATS[type];
   const e=applyRealism(BUILDERS[type](),type);
@@ -2201,7 +2227,7 @@ function makeWorldEnemy(type,lat,lon){
   e.userData={enemy:true,world:true,kind:type,hp:st.hp,hpMax:st.hp,state:"idle",cd:rand(1,2.5),
     name:type,speed:st.speed*rand(.85,1.15),dmg:st.dmg,souls:st.souls,fly:st.fly||0,
     anim:e.anim,animRefs:e,lat,lon,_placed:false,
-    wanderAng:Math.random()*6.28,wanderT:0,homeLat:lat,homeLon:lon};
+    wanderAng:Math.random()*6.28,wanderT:0,homeLat:lat,homeLon:lon,spawnGrace:performance.now()+SPAWN_GRACE_MS};
   // Park it FAR away on the floor immediately, so even for one frame it is never at the lens.
   const fy=(typeof G!=="undefined"&&isFinite(G.floorY))?G.floorY:0;
   e.position.set(0, fy, -999);
@@ -2217,7 +2243,7 @@ function makeWorldBoss(lat,lon){
   m.position.set(0, fy, -999);                  // never flashes at the camera origin before placement
   m.userData={boss:true,world:true,hp:240,hpMax:240,phase:0,state:"idle",cd:2,combo:[],comboT:0,
     speed:.5,name:b.name,dmg:14,lat,lon,homeLat:lat,homeLon:lon,introDone:false,_placed:false,
-    bearing:undefined,_wind:false};
+    bearing:undefined,_wind:false,spawnGrace:performance.now()+SPAWN_GRACE_MS};
   m.anim=m.anim;scene.add(m);G.world.push(m);G.boss=m;return m;
 }
 function buildWorld(){
@@ -2227,8 +2253,9 @@ function buildWorld(){
     const n=dangerCount(cl);
     for(let i=0;i<n;i++){
       const type=pickClusterType(cl);
-      const ang=Math.random()*6.28, rad=rand(4,18);
-      const [elat,elon]=offsetLatLon(cl.lat,cl.lon,Math.sin(ang)*rad,Math.cos(ang)*rad);
+      const ang=Math.random()*6.28, rad=rand(10,28);
+      let [elat,elon]=offsetLatLon(cl.lat,cl.lon,Math.cos(ang)*rad,Math.sin(ang)*rad);
+      [elat,elon]=safeSpawnLatLon(elat,elon);
       makeWorldEnemy(type,elat,elon).userData.cluster=cl;
     }
   }
@@ -2239,13 +2266,14 @@ function buildWorld(){
   for(const sp of G.spots.slice(0,-1)){
     const env=G.env, pool=BIOME_ENEMIES[env]||BIOME_ENEMIES.town;
     for(let i=0;i<2;i++){
-      const ang=Math.random()*6.28,rad=rand(5,20);
-      const [elat,elon]=offsetLatLon(sp.lat,sp.lon,Math.sin(ang)*rad,Math.cos(ang)*rad);
+      const ang=Math.random()*6.28,rad=rand(18,38);
+      let [elat,elon]=offsetLatLon(sp.lat,sp.lon,Math.cos(ang)*rad,Math.sin(ang)*rad);
+      [elat,elon]=safeSpawnLatLon(elat,elon);
       makeWorldEnemy(choice(pool),elat,elon);
     }
   }
   log("world built:",G.world.length,"entities ("+(G.world.length-1)+" foes + boss)");
-  _liveSpawnT=0; // force an immediate nearby spawn on the next tick
+  _liveSpawnT=performance.now(); // no immediate spawn burst on pilgrimage start
 }
 function pickClusterType(cl){
   const env=cl.env||G.env, pool=BIOME_ENEMIES[env]||BIOME_ENEMIES.town;
@@ -2278,6 +2306,7 @@ function updateWorld(dt){
     else if(u.bearing===undefined) u.bearing=Math.random()*Math.PI*2;
 
     const HARD_MIN = u.boss?BOSS_MIN_DIST:(u.fly?FLY_MIN_DIST:FIGHT_DIST);
+    const spawnBlocked = !!(u.spawnGrace && performance.now()<u.spawnGrace);
     const visibleNow = trueDist<=VISIBLE_R || u.state==="active";
     if(!visibleNow){ e.visible=false; continue; }
 
@@ -2296,7 +2325,7 @@ function updateWorld(dt){
     }
 
     // Once an enemy is visible/near enough, it starts a real GPS chase.
-    if(!inGrace && !G.invisible && u.state!=="active" && u.state!=="dead" && trueDist<PURSUE_R){
+    if(!inGrace && !spawnBlocked && !G.invisible && u.state!=="active" && u.state!=="dead" && trueDist<PURSUE_R){
       u.state="active"; if(u.boss&&!u.introDone)bossIntro(e);
     }
 
@@ -2342,7 +2371,22 @@ function updateWorld(dt){
       if(realD<1e-3){ddx=Math.sin(rel);ddz=-Math.cos(rel);realD=1;}
       const k=HARD_MIN/realD;
       e.position.x=cpx+ddx*k;e.position.z=cpz+ddz*k;
+      realD=HARD_MIN;
     }
+    // If GPS says an enemy is illegally close, repair its anchor immediately. This is
+    // the hard anti-lens guard for new pilgrimages and bad heat-cluster scatters.
+    if(!u.boss && (trueDist < HARD_MIN-0.25 || (u.state!=="active" && trueDist < SAFE_SPAWN_MIN))){
+      const br=(u.bearing!==undefined)?u.bearing:Math.random()*Math.PI*2;
+      const safe=Math.max(SAFE_SPAWN_MIN,HARD_MIN+8);
+      u.lat=G.lat+Math.cos(br)*safe/mlat;
+      u.lon=G.lon+Math.sin(br)*safe/mlon;
+      u.state="idle"; u._wind=false; u.spawnGrace=performance.now()+SPAWN_GRACE_MS;
+      trueDist=safe; u.bearing=br;
+      e.position.set(cpx+Math.sin(br-head)*safe,e.position.y,cpz-Math.cos(br-head)*safe);
+      realD=safe;
+      if(G._dbgOn)log("ANTI-LENS pushout",u.kind||u.name,"→",safe.toFixed(1),"m");
+    }
+    u._gpsDist=trueDist; u._realDist=realD; u._spawnBlocked=spawnBlocked;
 
     e.lookAt(cpx,e.position.y,cpz);
     const moving = u.state==="active" && trueDist>HARD_MIN+0.35;
@@ -2350,7 +2394,7 @@ function updateWorld(dt){
     }else if(u.state==="active"){
       if(u.hasClips) locomotion(e,moving,moving);
       else animEnemy(e,dt,clock.elapsedTime);
-      if(u.boss) bossCombat(e,dt); else enemyCombat(e,dt);
+      if(!spawnBlocked){ if(u.boss) bossCombat(e,dt); else enemyCombat(e,dt); }
     }else{
       if(u.hasClips) locomotion(e,false,false);
       else animEnemy(e,dt,clock.elapsedTime);
@@ -2365,17 +2409,18 @@ function updateWorld(dt){
       log("DBG",u.kind||"?","render=",renderDist.toFixed(1),"gps=",trueDist.toFixed(1),
         "real=",Math.hypot(e.position.x-cpx,e.position.z-cpz).toFixed(1),
         "eY=",e.position.y.toFixed(2),"floor=",FLOOR.toFixed(2),"headY=",camWorldPos().y.toFixed(2),
-        "floorRef=",!!G._hasFloorRef,"xr=",!!G.xr);
+        "floorRef=",!!G._hasFloorRef,"xr=",!!G.xr,"spawnBlock=",!!spawnBlocked);
     }
   }
   if(G._dbgOn && (!G._censusT||performance.now()-G._censusT>1000)){
     G._censusT=performance.now();
-    let vis=0,near=1e9;
-    for(const e of G.world){ if(e.visible)vis++;
-      const u=e.userData;if(!u)continue;
+    let vis=0,active=0,near=1e9,nearVis=1e9;
+    for(const e of G.world){ const u=e.userData;if(!u)continue;
+      if(e.visible){vis++; const ddv=Math.hypot((u.lat-G.lat)*mlat,(u.lon-G.lon)*mlon); if(ddv<nearVis)nearVis=ddv;}
+      if(u.state==="active")active++;
       const dd=Math.hypot((u.lat-G.lat)*mlat,(u.lon-G.lon)*mlon);
       if(dd<near)near=dd; }
-    log("CENSUS world=",G.world.length,"visible=",vis,"nearest=",near.toFixed(0),"m  VISIBLE_R=",VISIBLE_R,"demo=",!!G.demo);
+    log("CENSUS world=",G.world.length,"visible=",vis,"active=",active,"nearestGPS=",near.toFixed(0),"m nearestVisible=",nearVis.toFixed(0),"m VISIBLE_R=",VISIBLE_R,"demo=",!!G.demo);
   }
   const near=G.world.some(e=>e.userData&&e.userData.state==="active");
   if(near!==G._inCombat){G._inCombat=near; $("hint").textContent=near?t("foes_upon"):"";}
@@ -2589,15 +2634,18 @@ function animEnemy(e,dt,t){
 function enemyCombat(e,dt){
   // movement/positioning is handled by updateWorld; this only swings & lands hits.
   const u=e.userData;
+  if(u._spawnBlocked)return;
   const _cp=camWorldPos();
   const dHoriz=Math.hypot(_cp.x-e.position.x,_cp.z-e.position.z);
+  const gpsD = isFinite(u._gpsDist)?u._gpsDist:dHoriz;
+  const canHit = gpsD<=HIT_REACH && dHoriz<=HIT_REACH+0.2 && dHoriz>=FIGHT_DIST-0.75;
   if(u._wind){
     u.cd-=dt;
-    if(u.cd<=0){ if(dHoriz<HIT_REACH)hurtPlayer(u.dmg,"slash"); u._wind=false; u.cd=rand(1.4,2.6); }
+    if(u.cd<=0){ if(canHit)hurtPlayer(u.dmg,"slash"); u._wind=false; u.cd=rand(1.4,2.6); }
     return;
   }
   u.cd-=dt;
-  if(u.cd<=0 && dHoriz<HIT_REACH+0.5){
+  if(u.cd<=0 && canHit){
     u._wind=true;
     const dur=attackAnim(e);
     u.cd=dur?dur*0.45:0.6;
@@ -2690,7 +2738,7 @@ function playerAttack(){
   const w=G.equipped.weapon;
   let dmg=(w?w.dmg:6)+G.stats.attack*3;
   if(Math.random()<G.stats.strike*0.05){dmg=Math.round(dmg*2.2);toast(curLang()==="es"?"¡Crítico!":"Critical!",600);}
-  const reach=w&&/bow|spear/i.test(w.nm)?12:8.5;     // melee reach > the 7 m fight ring so hits land
+  const reach=w&&/bow|spear/i.test(w.nm)?15:12.0;    // melee reach tracks the anti-lens fight ring
   if(G.player.st<12){toast(curLang()==="es"?"Agotado…":"Exhausted…",900);return;}
   G.player.st-=12;updBars();
   swingFX();
@@ -3033,7 +3081,7 @@ async function enterXR(){
     G.xr=true;
     // entering AR moves the camera to the live headset pose → re-seed every enemy from scratch
     // so none of them linger at the old origin (which is now right on your lens).
-    G._worldGrace=performance.now()+3000;
+    G._worldGrace=performance.now()+8000; G._worldSpawnAllowedAt=performance.now()+9000;
     for(const e of G.world){ e.visible=false; if(e.userData){e.userData.appDist=undefined;e.userData._placed=false;
       e.userData.bearing=undefined; e.userData.state="idle"; e.userData._wind=false;} }
     const v=$("camFeed");if(v.srcObject){v.srcObject.getTracks().forEach(t=>t.stop());v.srcObject=null;}v.style.display="none";
@@ -3359,7 +3407,7 @@ function loop(time,xrFrame){
     if(performance.now()-_liveSpawnT>2000){_liveSpawnT=performance.now();liveSpawnNearby();
       // remove live-spawned, non-active foes you've left far behind
       const {mlat:_ml,mlon:_mo}=metersPerDeg(G.lat);
-      for(let i=G.world.length-1;i>=0;i--){const e=G.world[i],u=e.userData;
+      for(let i=G.world.length-1;i>=0;i--){const e=G.world[i],u=e.userData;if(!u)continue;
         if(u._live!==undefined||(u.cluster&&u.cluster._live)){
           const dd=Math.hypot((u.lat-G.lat)*_ml,(u.lon-G.lon)*_mo);
           if(dd>VISIBLE_R*1.6 && u.state!=="active"){scene.remove(e);G.world.splice(i,1);}
@@ -3480,6 +3528,7 @@ $("btnEnterFlat").onclick=()=>{hide("questScreen");enterFlat();};
 })();
 function beginGame(){
   log("beginGame · xr:",G.xr,"· intro lines:",G.legend.intro.length);applySettings();Audio.startMusic();
+  G._worldGrace=performance.now()+8000; G._worldSpawnAllowedAt=performance.now()+9000;
   buildWorld();
   $("hud").style.display="block";updBars();
   Dlg.say(G.legend.intro,()=>startTravel());
