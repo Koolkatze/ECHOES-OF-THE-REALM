@@ -2205,21 +2205,17 @@ function applyModel(holder,baseScene,key){
   }
 }
 async function tryUpgradeModel(holder,kind){
-  // The animation bundle /animations/<enemy>.glb contains the FULLY-RIGGED body + all clips on
-  // the SAME skeleton, so we use it as the visible body. (The /models/<enemy>.glb files are
-  // rigless static meshes that the clips cannot bind to — that's why nothing animated.)
-  let clip=null;
-  if(USE_EXTERNAL_GLTF_ANIMS){ try{ clip=await loadAnimClips(kind); }catch(e){log('anim load fail',kind,e&&e.message||e);} }
-  if(!holder.parent)return;
-  if(clip && clip.bundleScene){
-    applyModel(holder, clip.bundleScene, kind);     // rigged body from the animation bundle
-    return;
-  }
-  // Fallback: static models/<enemy>.glb (no clips will bind, but at least the body shows).
+  // Always use /models/<enemy>.glb as the visible body, then bind clips from /animations.
+  // Never show the animation GLB scene as the AR body; that is what caused lens snapping.
   let data=null;
   try{ data = ModelCache.cache[kind] || await ModelCache.get(kind); }catch(e){}
-  if(data && holder.parent){ applyModel(holder, data.scene, kind); return; }
-  log('no rigged bundle and no static model; procedural fallback:',kind);
+  if(data && holder.parent){
+    if(USE_EXTERNAL_GLTF_ANIMS){ try{ await loadAnimClips(kind); }catch(e){log('anim load fail',kind,e&&e.message||e);} }
+    if(!holder.parent)return;
+    applyModel(holder, data.scene, kind);
+    return;
+  }
+  log('static model missing; procedural fallback:',kind);
 }
 /* ---- stat blocks + biome pools ---- */
 const ENEMY_STATS={
