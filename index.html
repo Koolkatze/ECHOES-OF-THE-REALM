@@ -369,6 +369,8 @@
   background:rgba(0,0,0,.88);color:#7CFC9A;font:11px/1.5 monospace;padding:8px;white-space:pre-wrap;border-top:1px solid #444"></div>
 <button id="dbgBtn" style="position:fixed;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);
   z-index:301;background:#0008;color:#888;border:1px solid #444;font-size:10px;padding:4px 10px;border-radius:10px">🐞</button>
+<button id="dbgCopy" style="position:fixed;top:max(8px,env(safe-area-inset-top));left:calc(50% + 44px);
+  z-index:301;background:#0008;color:#7CFC9A;border:1px solid #444;font-size:10px;padding:4px 10px;border-radius:10px;display:none">⧉ Copy</button>
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -490,8 +492,23 @@ function log(...a){
 }
 addEventListener("DOMContentLoaded",()=>{
   $("dbgBtn").onclick=()=>{G._dbgOn=!G._dbgOn;const d=$("dbg");
-    d.style.display=d.style.display==="none"?"block":"none";
+    const showing=d.style.display==="none";
+    d.style.display=showing?"block":"none";
+    const cp=$("dbgCopy"); if(cp)cp.style.display=showing?"block":"none";
     d.textContent=LOGBUF.join("\n");d.scrollTop=d.scrollHeight;};
+  const _cp=$("dbgCopy");
+  if(_cp)_cp.onclick=async()=>{
+    const text=LOGBUF.join("\n");
+    try{ await navigator.clipboard.writeText(text); _cp.textContent="✓ Copied"; }
+    catch(e){
+      // fallback for browsers without clipboard API
+      const ta=document.createElement("textarea");ta.value=text;ta.style.position="fixed";ta.style.opacity="0";
+      document.body.appendChild(ta);ta.select();
+      try{document.execCommand("copy");_cp.textContent="✓ Copied";}catch(_){_cp.textContent="✗ failed";}
+      document.body.removeChild(ta);
+    }
+    setTimeout(()=>{_cp.textContent="⧉ Copy";},1500);
+  };
 });
 addEventListener("error",e=>{log("ERROR:",e.message,"@",e.filename&&e.filename.split("/").pop(),e.lineno);try{toast("⚠ "+e.message,6000);}catch(_){}});
 addEventListener("unhandledrejection",e=>{log("REJECTION:",e.reason&&e.reason.message||e.reason);try{toast("⚠ "+(e.reason&&e.reason.message||e.reason),6000);}catch(_){}});
@@ -1868,6 +1885,34 @@ function clipFileFor(spec, role, label){
   return spec.prefix+label+spec.suffix;
 }
 const _clipInFlight={};
+/* Remove root-motion: delete .position tracks targeting the armature/root/hips bone, which
+   in Meshy clips relocates the whole model to the clip's origin (landing it on the camera).
+   Limb rotation tracks are untouched, so the animation still plays fully. */
+function stripRootMotion(clip, scene){
+  if(!clip||!clip.tracks)return;
+  // find candidate root node names: the top-level child of the scene + anything called
+  // hips/root/armature/pelvis.
+  const rootNames=new Set();
+  if(scene){
+    scene.traverse&&scene.traverse(o=>{
+      const n=(o.name||"").toLowerCase();
+      if(/hip|pelvis|root|armature|spine_?0|mixamorig:?hips/.test(n)) rootNames.add(o.name);
+    });
+    // also the first object with children directly under scene
+    if(scene.children&&scene.children[0]) rootNames.add(scene.children[0].name);
+  }
+  clip.tracks=clip.tracks.filter(tr=>{
+    if(tr.name && tr.name.endsWith(".position")){
+      const node=tr.name.slice(0, tr.name.lastIndexOf("."));
+      // drop position track if it targets a root-ish node
+      const bare=node.indexOf("/")>=0?node.slice(node.lastIndexOf("/")+1):node;
+      if(rootNames.has(node)||rootNames.has(bare)) return false;
+      // also drop any position track at the very top of the hierarchy by heuristic name
+      if(/hip|pelvis|root|armature|mixamorig:?hips/i.test(bare)) return false;
+    }
+    return true;
+  });
+}
 function loadAnimClips(key){
   if(ClipCache[key]!==undefined)return Promise.resolve(ClipCache[key]);
   if(_clipInFlight[key])return _clipInFlight[key];
@@ -1899,7 +1944,7 @@ async function _loadAnimClips(key){
         const url=animURL(spec.folder, spec.prefix+label+spec.suffix);
         seen[label]=await new Promise(res=>{ loader.load(url,g=>{
           const c=g.animations&&g.animations[0];
-          if(c)c.userData={label};
+          if(c){ c.userData={label}; stripRootMotion(c, g.scene); }
           if(!out.model)out.model=g.scene;   // first rigged scene becomes the base model
           res(c||null);
         },undefined,()=>{log("anim miss:",key,label);res(null);}); });
@@ -1996,6 +2041,9 @@ function applyModel(holder,baseScene,key){
       }
     }
   }
+  // remember the inner rigged node + its planted local transform for per-frame re-anchoring
+  const inner=root.children&&root.children[0]?root.children[0]:null;
+  if(inner){ holder.userData._inner=inner; holder.userData._innerPos=inner.position.clone(); }
   holder.userData.animSet=set;
   holder.userData.hasClips=bound>0;
   holder.userData.walkOnly = !!(ANIM[key] && ANIM[key].walkFile);
@@ -3293,6 +3341,15 @@ function loop(time,xrFrame){
     const mx=MIXERS[i],r=mx.getRoot();
     let alive=false,p=r;while(p){if(p===scene||p===bestScene){alive=true;break;}p=p.parent;}
     if(alive)mx.update(dt);else MIXERS.splice(i,1);
+  }
+  // re-anchor rigged models: cancel any residual root translation from the clips
+  for(const e of G.world){const u=e.userData; if(u&&u._inner&&u._innerPos){
+    u._inner.position.x=u._innerPos.x; u._inner.position.z=u._innerPos.z;
+    // keep feet on the floor too (let Y be driven by placement, not the clip)
+    u._inner.position.y=u._innerPos.y;
+  }}
+  if(G.boss&&G.boss.userData&&G.boss.userData._inner&&G.boss.userData._innerPos){
+    const b=G.boss.userData; b._inner.position.copy(b._innerPos);
   }
   handSwing(dt);
   renderer.render(scene,camera);
