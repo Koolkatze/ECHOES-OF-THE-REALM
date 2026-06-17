@@ -1257,26 +1257,34 @@ function cellAt(lat,lon){
 let _liveSpawnT=0;
 function liveSpawnNearby(){
   if(G.lat==null||G.demo)return;
-  const cell=cellAt(G.lat,G.lon);
-  if(!cell||(cell.heat||0)<0.25)return;                 // only in meaningful danger
-  // how many of MY enemies are currently within sight?
   const {mlat,mlon}=metersPerDeg(G.lat);
+  // Decide local danger from BOTH the cell you stand in and the nearest cluster centre.
+  const cell=cellAt(G.lat,G.lon);
+  let heat=cell?(cell.heat||0):0, biome=cell?cell.biome:null;
+  let best=null,bd=1e9;
+  for(const cl of HEAT.clusters){ const d=haversine(G.lat,G.lon,cl.lat,cl.lon);
+    if(d<bd){bd=d;best=cl;} }
+  if(best && bd<150){ if((best.heat||0)>heat){heat=best.heat||0; biome=best.biome;} } // nearby cluster counts
+  // how many enemies are within sight right now?
   let nearby=0;
   for(const e of G.world){ if(e.userData.boss)continue;
     const dd=Math.hypot((e.userData.lat-G.lat)*mlat,(e.userData.lon-G.lon)*mlon);
     if(dd<VISIBLE_R)nearby++; }
-  const want = cell.heat>=0.66?5 : cell.heat>=0.33?3 : 2;
+  // always keep at least a couple of foes around while exploring; more in hotter areas
+  const want = heat>=0.66?5 : heat>=0.33?4 : heat>=0.12?3 : 2;
+  if(G._dbgOn) log("live-check: nearby=",nearby,"want=",want,"heat=",heat.toFixed(2),"cell=",!!cell,"nearestCl=",bd<9999?bd.toFixed(0)+"m":"none");
   if(nearby>=want)return;
-  // spawn the difference, scattered 18–45 m around YOU (visible, walk-in distance)
-  const env=MICRO_TO_ENV[cell.biome]||G.env||"town";
+  const env=MICRO_TO_ENV[biome]||G.env||"town";
   const pool=BIOME_ENEMIES[env]||BIOME_ENEMIES.town;
+  let made=0;
   for(let i=nearby;i<want;i++){
     const ang=Math.random()*6.28, rad=rand(18,45);
     const [elat,elon]=offsetLatLon(G.lat,G.lon,Math.sin(ang)*rad,Math.cos(ang)*rad);
     const e=makeWorldEnemy(choice(pool),elat,elon);
-    e.userData.cluster={lat:G.lat,lon:G.lon,biome:cell.biome,heat:cell.heat,env,cleared:false,clearedAt:0,_live:true};
+    e.userData.cluster={lat:G.lat,lon:G.lon,biome:biome||env,heat,env,cleared:false,clearedAt:0,_live:true};
+    made++;
   }
-  log("live-spawn:",want-nearby,"foes near you · biome:",cell.biome,"heat:",(cell.heat).toFixed(2));
+  if(made)log("live-spawn:",made,"foes near you · biome:",biome||env,"· heat:",heat.toFixed(2));
 }
 function nearestCluster(lat,lon){
   let best=null,bd=1e9;
@@ -2050,14 +2058,37 @@ function spawnEnemy(spot,i,n){
 G.world=[];            // all live world entities (enemies + boss)
 G.eyeHeight=1.5;       // assumed standing eye height (m) when no floor plane is known
 G.floorY=0;            // world-Y of the real ground; updated each frame
-function currentFloorY(){
-  if(G.xr&&G.hitFloorY!=null)return G.hitFloorY;          // real measured ground
-  if(G.xr&&G._hasFloorRef)return 0;                       // XR local-floor → y=0
-  // Camera/flat mode: floor sits a fixed eyeHeight below the camera's resting height.
-  // Use the camera's CURRENT y but guard against tilt/NaN by clamping to a sane band.
-  const cy=(camera&&isFinite(camera.position.y))?camera.position.y:1.6;
+// Live headset/camera world pose. In XR, three.js r128 moves an INTERNAL render
+// camera (renderer.xr.getCamera), NOT the plain `camera` object — so read from there.
+const _camWP=new THREE.Vector3(), _camWD=new THREE.Vector3();
+function camWorldPos(){
+  const src=(G.xr&&renderer.xr.getCamera)?renderer.xr.getCamera(camera):camera;
+  const m=(src&&src.matrixWorld)?src.matrixWorld:(camera&&camera.matrixWorld);
+  if(m)_camWP.setFromMatrixPosition(m); else _camWP.set(0,1.6,0);
+  return _camWP;
+}
+function camWorldDir(){
+  const src=(G.xr&&renderer.xr.getCamera)?renderer.xr.getCamera(camera):camera;
+  if(src&&src.getWorldDirection)src.getWorldDirection(_camWD); else _camWD.set(0,0,-1);
+  return _camWD;
+}
+function expectedFloorY(){
+  // Where the floor SHOULD be: a fixed eye-height below the live head height.
+  const cy=camWorldPos().y;
   const eh=(G.eyeHeight&&isFinite(G.eyeHeight))?G.eyeHeight:1.5;
   return cy-eh;
+}
+function currentFloorY(){
+  const exp=expectedFloorY();
+  // Only trust the AR hit-test when it lands clearly BELOW the head AND near the
+  // expected floor. A ray held level hits walls / furniture / people at chest
+  // height; trusting that is what made enemies hover at eye level.
+  if(G.xr&&G.hitFloorY!=null){
+    const camY=camWorldPos().y;
+    if(G.hitFloorY<camY-0.8 && Math.abs(G.hitFloorY-exp)<1.0)return G.hitFloorY;
+  }
+  if(G.xr&&G._hasFloorRef)return 0;   // XR local-floor reference → ground is y=0
+  return exp;                          // camera / flat fallback
 }
 let _hitTmp=null;
 function sampleHitTest(xrFrame){
@@ -2069,9 +2100,14 @@ function sampleHitTest(xrFrame){
       const pose=results[0].getPose(refSpace);
       if(pose){
         const y=pose.transform.position.y;
-        // smooth so a momentary bad sample doesn't pop the floor
-        G.hitFloorY=(G.hitFloorY==null)?y:G.hitFloorY+(y-G.hitFloorY)*0.2;
-        G._lastHitT=performance.now();
+        const camY=camWorldPos().y;
+        // Accept only hits clearly below the head. A level/forward ray otherwise
+        // snaps the "floor" onto walls, furniture or people at chest height.
+        if(y<camY-0.8){
+          // smooth so a momentary bad sample doesn't pop the floor
+          G.hitFloorY=(G.hitFloorY==null)?y:G.hitFloorY+(y-G.hitFloorY)*0.2;
+          G._lastHitT=performance.now();
+        }
       }
     }else if(G._lastHitT&&performance.now()-G._lastHitT>4000){
       G.hitFloorY=null; // lost tracking for a while → fall back to other methods
@@ -2084,6 +2120,8 @@ const FIGHT_DIST=5.0;   // metres: where a melee enemy STOPS to fight (so you ca
 const HIT_REACH=5.6;    // metres: how close it must be to land a blow (a bit > FIGHT_DIST)
 const PURSUE_R=45;      // metres: enemy gives chase once you are this close (you see them first)
 const VISIBLE_R=55;     // metres: only enemies in your nearby zone are drawn; rest appear as you walk in
+const FLY_MIN_DIST=4.5; // metres: flyers / casters hold at least this far (no looming overhead)
+const BOSS_MIN_DIST=6.0;// metres: the boss keeps even more space
 G.invisible=false;      // Veil spell active → enemies cannot see you
 function offsetLatLon(lat,lon,dN,dE){const {mlat,mlon}=metersPerDeg(lat);
   return [lat+dN/mlat, lon+dE/mlon];}
@@ -2132,6 +2170,7 @@ function buildWorld(){
     }
   }
   log("world built:",G.world.length,"entities ("+(G.world.length-1)+" foes + boss)");
+  _liveSpawnT=0; // force an immediate nearby spawn on the next tick
 }
 function pickClusterType(cl){
   const env=cl.env||G.env, pool=BIOME_ENEMIES[env]||BIOME_ENEMIES.town;
@@ -2150,6 +2189,11 @@ function updateWorld(dt){
   const {mlat,mlon}=metersPerDeg(G.lat);
   const head=(G.heading||0)*Math.PI/180;
   const FLOOR=currentFloorY();
+  // Live player position in world space. In XR the headset moves the INTERNAL
+  // render camera, NOT `camera`, so anchor all distance maths to camWorldPos()
+  // (captured as scalars so later camWorldPos() calls can't mutate it).
+  const CP=camWorldPos();
+  const cpx=CP.x, cpy=CP.y, cpz=CP.z;
   for(let i=G.world.length-1;i>=0;i--){
     const e=G.world[i],u=e.userData;
     // ---- bearing & true distance from player, in world metres ----
@@ -2160,16 +2204,18 @@ function updateWorld(dt){
     // stable bearing: from GPS if meaningful, else a fixed random one per enemy
     if(u.bearing===undefined) u.bearing = trueDist>0.5 ? Math.atan2(dE,dN) : Math.random()*Math.PI*2;
     if(trueDist>0.5) u.bearing = Math.atan2(dE,dN);   // keep updating from GPS while it's valid
+    // ---- per-enemy minimum distance (personal space ring) ----
+    const MIN_D = u.boss?BOSS_MIN_DIST:(u.fly?FLY_MIN_DIST:FIGHT_DIST);
     // ---- approach distance: the distance we actually render the enemy at ----
     // initialise it to its true distance (so GPS foes start where they really are; demo foes
     // get a far spawn so they walk in from ~40 m).
     if(u.appDist===undefined){
-      u.appDist = G.demo ? 40 : Math.max(trueDist, FIGHT_DIST);  // its real distance (demo walks in from 40 m)
+      u.appDist = G.demo ? 40 : Math.max(trueDist, MIN_D);  // its real distance (demo walks in from 40 m)
       // place it immediately at that distance so it's visible from the first frame
       const rel0=u.bearing-head, d0=u.appDist;
-      e.position.set(camera.position.x+Math.sin(rel0)*d0,
-                     currentFloorY()+(u.fly?Math.min(u.fly,0.9):0),
-                     camera.position.z-Math.cos(rel0)*d0);
+      e.position.set(cpx+Math.sin(rel0)*d0,
+                     FLOOR+(u.fly?Math.min(u.fly,0.9):0),
+                     cpz-Math.cos(rel0)*d0);
     }
     // Veil cancels pursuit
     if(G.invisible && u.state==="active"){u.state="idle";u._wind=false;
@@ -2181,38 +2227,49 @@ function updateWorld(dt){
     // ---- decide the target distance ----
     let targetDist;
     if(u.state==="active"){
-      targetDist = u.boss?6.0:(u.fly?4.5:FIGHT_DIST);   // close in to the fight ring
+      targetDist = MIN_D;   // close in to the fight ring, never inside it
     } else {
       // idle: rest at its real distance (gentle compression past 35 m so far ones still fit),
       // never nearer than the fight ring so it doesn't crowd you while wandering.
       targetDist = trueDist<=35?trueDist:35+(trueDist-35)*0.5;
-      targetDist = Math.max(targetDist, FIGHT_DIST);
+      targetDist = Math.max(targetDist, MIN_D);
     }
     // ease appDist toward target; approach speed scales with the enemy's speed when chasing
     const closeRate = (u.state==="active") ? (u.speed*1.6+0.4) : 4.0; // m/s
     if(u.appDist>targetDist) u.appDist = Math.max(targetDist, u.appDist - closeRate*dt);
     else                     u.appDist = Math.min(targetDist, u.appDist + closeRate*dt);
-    // HARD floor: never, ever render closer than the fight ring (minus a hair for fly)
-    const HARD_MIN = u.boss?6.0:(u.fly?4.5:FIGHT_DIST);
-    if(u.appDist < HARD_MIN) u.appDist = HARD_MIN;
-    // ---- convert (bearing, appDist) → world position around the camera ----
+    // HARD floor: never, ever render closer than the fight ring
+    if(u.appDist < MIN_D) u.appDist = MIN_D;
+    // ---- convert (bearing, appDist) → world position around the player ----
     // bearing is clockwise-from-north; relative to your facing (head). east=+x, north=-z.
     const rel = u.bearing - head;
     const ex = Math.sin(rel) * u.appDist;
     const ez = -Math.cos(rel) * u.appDist;
-    const tx = camera.position.x + ex, tz = camera.position.z + ez;
+    const tx = cpx + ex, tz = cpz + ez;
     // smooth horizontal move to target, snap-follow vertical to the live floor
     const lerp = (u.state==="active")?Math.min(1,dt*6):Math.min(1,dt*4);
     e.position.x += (tx-e.position.x)*lerp;
     e.position.z += (tz-e.position.z)*lerp;
     const ty = FLOOR + (u.fly?Math.min(u.fly,0.9):0);
     e.position.y += (ty-e.position.y)*Math.min(1,dt*6);
-    e.lookAt(camera.position.x, e.position.y, camera.position.z);
+    // ---- HARD personal-space ring on the ACTUAL rendered position ----
+    // Smoothing + you physically walking forward can still push an enemy inside
+    // MIN_D. Shove it straight back out along the line from you so it can NEVER
+    // overlap or loom over you, however you move. This is the real anti-overlap fix.
+    {
+      const ddx=e.position.x-cpx, ddz=e.position.z-cpz;
+      const realD=Math.hypot(ddx,ddz);
+      if(realD<MIN_D){
+        if(realD>0.0001){ const k=MIN_D/realD; e.position.x=cpx+ddx*k; e.position.z=cpz+ddz*k; }
+        else { e.position.x=cpx+Math.sin(rel)*MIN_D; e.position.z=cpz-Math.cos(rel)*MIN_D; }
+      }
+    }
+    e.lookAt(cpx, e.position.y, cpz);
     // ---- animation + combat ----
     if(u.state==="dead"){
       // death anim playing; hold
     } else if(u.state==="active"){
-      if(u.hasClips) locomotion(e, u.appDist>HARD_MIN+0.3, u.appDist>HARD_MIN+0.3);
+      if(u.hasClips) locomotion(e, u.appDist>MIN_D+0.3, u.appDist>MIN_D+0.3);
       else animEnemy(e,dt,clock.elapsedTime);
       if(u.boss) bossCombat(e,dt); else enemyCombat(e,dt);
     } else {
@@ -2225,8 +2282,9 @@ function updateWorld(dt){
     }
     if(G._dbgOn && u.state==="active" && (!G._dbgT||performance.now()-G._dbgT>1000)){
       G._dbgT=performance.now();
-      log("DBG",u.kind||"?","app=",u.appDist.toFixed(1),"true=",trueDist.toFixed(1),
-        "eY=",e.position.y.toFixed(2),"floor=",FLOOR.toFixed(2),"xr=",!!G.xr);
+      const realD=Math.hypot(e.position.x-cpx,e.position.z-cpz);
+      log("DBG",u.kind||"?","app=",u.appDist.toFixed(1),"real=",realD.toFixed(1),"true=",trueDist.toFixed(1),
+        "eY=",e.position.y.toFixed(2),"camY=",cpy.toFixed(2),"floor=",FLOOR.toFixed(2),"xr=",!!G.xr);
     }
   }
   if(G._dbgOn && (!G._censusT||performance.now()-G._censusT>1000)){
@@ -2260,7 +2318,7 @@ function buildBossArena(){
   const type=G.legend.boss.type, A=BOSS_ARENA[type]||BOSS_ARENA.knight;
   arenaGroup=new THREE.Group();scene.add(arenaGroup);
   scene.fog=new THREE.FogExp2(A.fog,0.10);
-  const cx=camera.position.x, cz=camera.position.z;
+  const _cp=camWorldPos(); const cx=_cp.x, cz=_cp.z;
   // ring of props around the player at 2.5–5 m, floor-anchored
   const count=10;
   for(let i=0;i<count;i++){
@@ -2392,7 +2450,8 @@ function bossAnim(b,dt,t){
 }
 function bossCombat(b,dt){
   // positioning handled by updateWorld; this is phases + combo swings only.
-  const u=b.userData,d=Math.hypot(camera.position.x-b.position.x,camera.position.z-b.position.z);
+  const u=b.userData;
+  const _cp=camWorldPos(), d=Math.hypot(_cp.x-b.position.x,_cp.z-b.position.z);
   const frac=u.hp/u.hpMax;
   const ph=frac>.66?0:frac>.33?1:2;
   if(ph!==u.phase){u.phase=ph;u.speed+=.25;u.dmg+=4;
@@ -2445,7 +2504,8 @@ function animEnemy(e,dt,t){
 function enemyCombat(e,dt){
   // movement/positioning is handled by updateWorld; this only swings & lands hits.
   const u=e.userData;
-  const dHoriz=Math.hypot(camera.position.x-e.position.x,camera.position.z-e.position.z);
+  const _cp=camWorldPos();
+  const dHoriz=Math.hypot(_cp.x-e.position.x,_cp.z-e.position.z);
   if(u._wind){
     u.cd-=dt;
     if(u.cd<=0){ if(dHoriz<HIT_REACH)hurtPlayer(u.dmg,"slash"); u._wind=false; u.cd=rand(1.4,2.6); }
@@ -2545,20 +2605,21 @@ function playerAttack(){
   const w=G.equipped.weapon;
   let dmg=(w?w.dmg:6)+G.stats.attack*3;
   if(Math.random()<G.stats.strike*0.05){dmg=Math.round(dmg*2.2);toast(curLang()==="es"?"¡Crítico!":"Critical!",600);}
-  const reach=w&&/bow|spear/i.test(w.nm)?10:6.0;
+  const reach=w&&/bow|spear/i.test(w.nm)?10:6.5;   // > the 5 m fight ring so melee blows actually land
   if(G.player.st<12){toast(curLang()==="es"?"Agotado…":"Exhausted…",900);return;}
   G.player.st-=12;updBars();
   swingFX();
-  // hit whatever is in front
-  const fwd=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  // hit whatever is in front — anchor to the LIVE head pose (XR moves the internal camera)
+  const cp=camWorldPos().clone();
+  const fwd=camWorldDir().clone();
   let hit=false;
   const tryHit=t=>{
-    const to=tmpV.subVectors(t.position,camera.position);const d=to.length();
+    const to=tmpV.subVectors(t.position,cp);const d=to.length();
     if(d<reach&&to.normalize().dot(fwd)>.55){damage(t,dmg);hit=true;}
   };
   for(const e of [...G.world]){ if(e.userData.state==="active"&&e.visible) tryHit(e); }
   for(const l of [...G.loots]){
-    const to=tmpV.subVectors(l.position,camera.position);
+    const to=tmpV.subVectors(l.position,cp);
     if(to.length()<2.4&&to.normalize().dot(fwd)>.5) openLoot(l);
   }
   if(!hit&&navigator.vibrate)navigator.vibrate(10);
@@ -2569,8 +2630,9 @@ function specialAttack(){
   if(G.player.mp<s.cost){toast(curLang()==="es"?"PM insuficiente":"Not enough MP",1000);return;}
   G.player.mp-=s.cost;updBars();
   const sdmg=Math.round(s.dmg*(1+G.stats.magic*0.08));
-  shockwave(camera.position);
-  for(const e of [...G.world]) if(e.visible&&e.userData.state==="active"&&e.position.distanceTo(camera.position)<7) damage(e,sdmg);
+  const cp=camWorldPos().clone();
+  shockwave(cp);
+  for(const e of [...G.world]) if(e.visible&&e.userData.state==="active"&&e.position.distanceTo(cp)<7) damage(e,sdmg);
 }
 let invuln=0;
 function dodge(){
@@ -2887,13 +2949,19 @@ async function enterXR(){
     session.addEventListener("visibilitychange",()=>log("xr visibility:",session.visibilityState));
     G.xr=true;
     const v=$("camFeed");if(v.srcObject){v.srcObject.getTracks().forEach(t=>t.stop());v.srcObject=null;}v.style.display="none";
-    // hit-test: ray straight ahead from the viewer to find real surfaces (floors)
+    // hit-test: ray aimed DOWN-and-forward from the viewer so it lands on the real
+    // FLOOR ahead of you. A straight-ahead ray hits walls / furniture / people at
+    // chest height — that is what snapped enemies to eye level. Fall back to a plain
+    // viewer-space ray if a runtime rejects the offsetRay form.
     G.hitSource=null;G.hitFloorY=null;G.hitReady=false;
     try{
       const viewerSpace=await session.requestReferenceSpace("viewer");
       if(session.requestHitTestSource){
-        G.hitSource=await session.requestHitTestSource({space:viewerSpace});
-        G.hitReady=true;log("hit-test source ready");
+        const opts={space:viewerSpace};
+        try{ if(typeof XRRay!=="undefined") opts.offsetRay=new XRRay({x:0,y:0,z:0,w:1},{x:0,y:-1,z:-1,w:0}); }catch(e){}
+        try{ G.hitSource=await session.requestHitTestSource(opts); }
+        catch(e){ G.hitSource=await session.requestHitTestSource({space:viewerSpace}); }
+        G.hitReady=true;log("hit-test source ready (floor-aimed ray)");
       }else log("hit-test API not present on session");
     }catch(err){log("hit-test unavailable:",err.message||err);}
     for(let i=0;i<2;i++){
