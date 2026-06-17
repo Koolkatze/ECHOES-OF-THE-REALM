@@ -1257,26 +1257,34 @@ function cellAt(lat,lon){
 let _liveSpawnT=0;
 function liveSpawnNearby(){
   if(G.lat==null||G.demo)return;
-  const cell=cellAt(G.lat,G.lon);
-  if(!cell||(cell.heat||0)<0.25)return;                 // only in meaningful danger
-  // how many of MY enemies are currently within sight?
   const {mlat,mlon}=metersPerDeg(G.lat);
+  // Decide local danger from BOTH the cell you stand in and the nearest cluster centre.
+  const cell=cellAt(G.lat,G.lon);
+  let heat=cell?(cell.heat||0):0, biome=cell?cell.biome:null;
+  let best=null,bd=1e9;
+  for(const cl of HEAT.clusters){ const d=haversine(G.lat,G.lon,cl.lat,cl.lon);
+    if(d<bd){bd=d;best=cl;} }
+  if(best && bd<150){ if((best.heat||0)>heat){heat=best.heat||0; biome=best.biome;} } // nearby cluster counts
+  // how many enemies are within sight right now?
   let nearby=0;
   for(const e of G.world){ if(e.userData.boss)continue;
     const dd=Math.hypot((e.userData.lat-G.lat)*mlat,(e.userData.lon-G.lon)*mlon);
     if(dd<VISIBLE_R)nearby++; }
-  const want = cell.heat>=0.66?5 : cell.heat>=0.33?3 : 2;
+  // always keep at least a couple of foes around while exploring; more in hotter areas
+  const want = heat>=0.66?5 : heat>=0.33?4 : heat>=0.12?3 : 2;
+  if(G._dbgOn) log("live-check: nearby=",nearby,"want=",want,"heat=",heat.toFixed(2),"cell=",!!cell,"nearestCl=",bd<9999?bd.toFixed(0)+"m":"none");
   if(nearby>=want)return;
-  // spawn the difference, scattered 18–45 m around YOU (visible, walk-in distance)
-  const env=MICRO_TO_ENV[cell.biome]||G.env||"town";
+  const env=MICRO_TO_ENV[biome]||G.env||"town";
   const pool=BIOME_ENEMIES[env]||BIOME_ENEMIES.town;
+  let made=0;
   for(let i=nearby;i<want;i++){
     const ang=Math.random()*6.28, rad=rand(18,45);
     const [elat,elon]=offsetLatLon(G.lat,G.lon,Math.sin(ang)*rad,Math.cos(ang)*rad);
     const e=makeWorldEnemy(choice(pool),elat,elon);
-    e.userData.cluster={lat:G.lat,lon:G.lon,biome:cell.biome,heat:cell.heat,env,cleared:false,clearedAt:0,_live:true};
+    e.userData.cluster={lat:G.lat,lon:G.lon,biome:biome||env,heat,env,cleared:false,clearedAt:0,_live:true};
+    made++;
   }
-  log("live-spawn:",want-nearby,"foes near you · biome:",cell.biome,"heat:",(cell.heat).toFixed(2));
+  if(made)log("live-spawn:",made,"foes near you · biome:",biome||env,"· heat:",heat.toFixed(2));
 }
 function nearestCluster(lat,lon){
   let best=null,bd=1e9;
@@ -2132,6 +2140,7 @@ function buildWorld(){
     }
   }
   log("world built:",G.world.length,"entities ("+(G.world.length-1)+" foes + boss)");
+  _liveSpawnT=0; // force an immediate nearby spawn on the next tick
 }
 function pickClusterType(cl){
   const env=cl.env||G.env, pool=BIOME_ENEMIES[env]||BIOME_ENEMIES.town;
