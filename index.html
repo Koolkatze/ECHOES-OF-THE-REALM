@@ -513,6 +513,7 @@ addEventListener("DOMContentLoaded",()=>{
 addEventListener("error",e=>{log("ERROR:",e.message,"@",e.filename&&e.filename.split("/").pop(),e.lineno);try{toast("⚠ "+e.message,6000);}catch(_){}});
 addEventListener("unhandledrejection",e=>{log("REJECTION:",e.reason&&e.reason.message||e.reason);try{toast("⚠ "+(e.reason&&e.reason.message||e.reason),6000);}catch(_){}});
 log("page loaded · secure:",window.isSecureContext,"· UA:",navigator.userAgent.slice(0,80));
+log("EOTR build: v8 flat-animation-bundle combat · absolute GitHub Pages animation URLs · static visual anchors ON");
 
 /* ---------------- game state ---------------- */
 const G = {
@@ -1797,9 +1798,11 @@ async function preloadModels(onProgress){
   log("preloading",list.length,"models:",list.join(","));
   let done=0;
   await Promise.all(list.map(async k=>{
-    let cd=null;
-    try{ cd=await loadAnimClips(k); }catch(e){}
-    if(!(cd&&cd.model)){ try{ await ModelCache.get(k); }catch(e){} }  // only need static model if no animated one
+    // In stable mode we preload ONLY static visual models from /models.
+    // Animation GLBs are not used as renderable scenes, because they can carry root/bind
+    // transforms that snap the visible mesh to the XR camera while gameplay distance is valid.
+    try{ await ModelCache.get(k); }catch(e){}
+    if(USE_EXTERNAL_GLTF_ANIMS){ try{ await loadAnimClips(k); }catch(e){} }
     done++; if(onProgress)onProgress(done,list.length,k);
   }));
   const got=list.filter(k=>ModelCache.cache[k]).length;
@@ -1832,7 +1835,14 @@ const MIXERS=[];
    tentacle/treant/etc match). Single-walk enemies (wolf, crabgolem,
    gargoyle, hypoglif, fulion, boss_beast) only have a walk loop.
    =================================================================== */
-const ANIM_BASE = (typeof PAGE_ROOT!=="undefined"?PAGE_ROOT:"")+"animations/";
+// Production animation mode.
+// Visual bodies stay anchored to /models/<enemy>.glb. Animation clips are loaded from
+// ONE FLAT GLB PER ENEMY at the GitHub Pages asset URL:
+//   https://koolkatze.github.io/ECHOES-OF-THE-REALM/animations/<enemy>.glb
+// The animation GLB scene is never used as the gameplay-visible body, preventing XR lens snapping.
+const USE_EXTERNAL_GLTF_ANIMS = true;
+const EOTR_PAGES_ROOT = "https://koolkatze.github.io/ECHOES-OF-THE-REALM/";
+const ANIM_BASE = EOTR_PAGES_ROOT + "animations/";
 const ANIM = {
   spirit: { folder:"spirit", prefix:"Meshy_AI_Violet_Veil_biped_Animation_", suffix:"_withSkin.glb",
     idle:["Grab_Wall_Midair_Idle"], walk:["Walking","Unsteady_Walk"], run:["Running"],
@@ -1884,63 +1894,135 @@ const ANIM = {
   boss_beast: { folder:"boss_beast", walkFile:"boss_wolf_walk.glb" },
 };
 
-function animURL(folder,file){
+function animFileURL(file){
+  let base=ANIM_BASE.trim();if(base&&!base.endsWith("/"))base+="/";
+  return new URL(base+file,location.href).href;
+}
+function animLegacyURL(folder,file){
   let base=ANIM_BASE.trim();if(base&&!base.endsWith("/"))base+="/";
   return new URL(base+folder+"/"+file,location.href).href;
 }
 /* cache of loaded AnimationClips per enemy/boss key */
-const ClipCache={};      // key -> {idle:[clip],walk:[clip],...}
-function clipFileFor(spec, role, label){
-  // single-walk enemies use walkFile directly
-  if(spec.walkFile) return spec.walkFile;
-  return spec.prefix+label+spec.suffix;
-}
+const ClipCache={};      // key -> {idle:[clip],walk:[clip],run:[clip],attack:[clip],hit:[clip],death:[clip],roar:[clip],source:string}
 const _clipInFlight={};
-/* Remove animation-driven translation.
-   IMPORTANT: Meshy multi-animation GLBs often contain .position tracks on many bones/nodes.
-   Even when the world holder is correctly placed 30-50 m away, those tracks can pull the
-   visible skinned mesh back toward the clip origin, which looks like feet/body glued to the lens.
 
-   For safety we now drop EVERY position track from EVERY loaded enemy/boss clip, including
-   single-walk and multi-animation enemies. Rotation/quaternion/scale/morph tracks are kept, so walk/attack/hit still animate, but no clip
-   is allowed to translate any part of the rig or model through space. */
+function animFolderFor(key){
+  const spec=ANIM[key]||{};
+  return spec.folder || (key==="hypoglif"?"hypogliff":key);
+}
+function animBundleCandidateFiles(key, folder){
+  // New requested layout: one GLB per enemy directly under /animations/.
+  // Primary: /animations/<enemy>.glb loaded from the GitHub Pages absolute URL.
+  // Extra aliases keep bosses and spelling variants tolerant.
+  const bare=key;
+  const noBoss=key.replace(/^boss_/,"");
+  const f=folder||bare;
+  return [...new Set([
+    bare+".glb",
+    f+".glb",
+    bare+"_animations.glb",
+    bare+"_animation.glb",
+    bare+"_all.glb",
+    noBoss+".glb",
+    noBoss+"_animations.glb"
+  ])];
+}
+async function fetchParseGLTF(url, label){
+  if(!(await ensureGLTFLoader())||!THREE.GLTFLoader)return null;
+  try{
+    const r=await fetch(url,{cache:"force-cache"});
+    if(!r.ok)return null;
+    const buf=await r.arrayBuffer();
+    const head=new TextDecoder().decode(buf.slice(0,40));
+    if(head.startsWith("version https://git-lfs")){log("anim",label,"→ Git LFS pointer, not real GLB",url);return null;}
+    const magic=new TextDecoder().decode(buf.slice(0,4));
+    if(magic!=="glTF"){log("anim",label,"→ not GLB",head.slice(0,16),url);return null;}
+    return await new Promise(res=>{
+      const loader=new THREE.GLTFLoader();
+      const dr=getDraco(); if(dr)loader.setDRACOLoader(dr);
+      loader.parse(buf,url.slice(0,url.lastIndexOf("/")+1),
+        g=>res(g),
+        e=>{log("anim",label,"parse error:",e&&e.message||e,url);res(null);});
+    });
+  }catch(e){return null;}
+}
+/* Remove animation-driven translation.
+   The AR anchor must be the ONLY thing allowed to move the body through space.
+   We strip all .position tracks from imported enemy/boss clips; rotations/quaternions,
+   scale and morph tracks remain. This prevents root motion or exported node offsets
+   from dragging feet/body back to the XR camera/lens. */
 function stripRootMotion(clip, scene, opts={}){
   if(!clip||!clip.tracks)return;
-  const dropAllPositionTracks = !!opts.dropAllPositionTracks;
-  const before = clip.tracks.length;
-  let dropped = 0;
-
-  // fallback root-only set for single-walk files where we do not need the nuclear option
-  const rootNames=new Set();
-  if(scene){
-    scene.traverse&&scene.traverse(o=>{
-      const n=(o.name||"").toLowerCase();
-      if(/hip|pelvis|root|armature|spine_?0|mixamorig:?hips/.test(n)) rootNames.add(o.name);
-    });
-    if(scene.children&&scene.children[0]) rootNames.add(scene.children[0].name);
-  }
-
-  function isPositionTrack(name){
-    // Handles "Bone.position", "Bone.position[x]", and odd exporter forms containing .position.
-    return !!name && (/\.position(?:$|\[|\.)/.test(name) || name.endsWith(".position"));
-  }
-
+  const before=clip.tracks.length;
+  let dropped=0;
+  function isPositionTrack(name){return !!name && (/\.position(?:$|\[|\.)/.test(name)||name.endsWith(".position"));}
   clip.tracks=clip.tracks.filter(tr=>{
     const name=tr&&tr.name||"";
-    if(!isPositionTrack(name)) return true;
-
-    if(dropAllPositionTracks){ dropped++; return false; }
-
-    const node=name.slice(0, name.lastIndexOf("."));
-    const bare=node.indexOf("/")>=0?node.slice(node.lastIndexOf("/")+1):node;
-    if(rootNames.has(node)||rootNames.has(bare)||/hip|pelvis|root|armature|mixamorig:?hips/i.test(bare)){
-      dropped++; return false;
-    }
+    if(isPositionTrack(name)){dropped++;return false;}
     return true;
   });
-
-  if(clip.resetDuration) clip.resetDuration();
+  if(clip.resetDuration)clip.resetDuration();
   clip.userData=Object.assign({},clip.userData||{}, {positionTracksDropped:dropped, tracksBefore:before, tracksAfter:clip.tracks.length});
+}
+function cleanClipLabel(name){
+  return String(name||"")
+    .replace(/^Armature\|/i,"")
+    .replace(/^.*Animation[_\s-]*/i,"")
+    .replace(/_?withSkin$/i,"")
+    .replace(/\.(glb|gltf)$/i,"")
+    .replace(/^Meshy_AI_.*?_biped_/i,"")
+    .replace(/[^a-zA-Z0-9]+/g,"_")
+    .replace(/^_+|_+$/g,"");
+}
+function classifyClipRole(name){
+  const raw=String(name||"");
+  const n=cleanClipLabel(raw).toLowerCase();
+  // Death must be tested before hit, because many death clips include "fall".
+  if(/\b(death|dead|die|dying|electrocuted|strangled|fall_forward|fall_backward|fall_down|fall$|shot_in_the_back_and_fall|shot_and_fall|falling_down)\b/i.test(n))return "death";
+  if(/\b(hit|hurt|damage|damaged|knock|knocked|shot|blown|stagger|flinch|impact)\b/i.test(n))return "hit";
+  if(/\b(roar|shout|shouting|scream|angry)\b/i.test(n))return "roar";
+  if(/\b(run|running|runfast|sprint|charge_forward)\b/i.test(n))return "run";
+  if(/\b(walk|walking|limp|limping|unsteady|sneaky|thoughtful|crawl)\b/i.test(n))return "walk";
+  if(/\b(idle|breathe|breathing|look|scan|guard|wait|grab_wall|hover)\b/i.test(n))return "idle";
+  if(/\b(attack|slash|combo|kick|fist|punch|hook|sweep|spin|slam|stomp|throw|cast|spell|skill|thrust|lunge|reap|hammer|axe|sword|shield_push|charged|power)\b/i.test(n))return "attack";
+  // Unknown clips are safer as idle than attack; attacking from a wrong clip feels broken.
+  return "idle";
+}
+function clipCombatMeta(name, role){
+  const n=cleanClipLabel(name).toLowerCase();
+  const meta={hitAt:.88, damageMul:1, reach:HIT_REACH||10, tag:"normal"};
+  if(role!=="attack")return meta;
+  if(/combo|triple|double|skill/.test(n)){meta.hitAt=.92;meta.damageMul=1.15;meta.tag="combo";}
+  if(/heavy|slam|stomp|hammer|ground/.test(n)){meta.hitAt=.94;meta.damageMul=1.35;meta.reach+=1.2;meta.tag="heavy";}
+  if(/lunge|flying|charge|thrust|reap|spin|power/.test(n)){meta.hitAt=.90;meta.damageMul=1.2;meta.reach+=2.5;meta.tag="lunge";}
+  if(/kick|sweep|hook|punch|fist|slash|axe|sword/.test(n)){meta.hitAt=.86;meta.damageMul=1.0;meta.tag="melee";}
+  if(/throw|cast|spell/.test(n)){meta.hitAt=.82;meta.damageMul=1.1;meta.reach+=3.5;meta.tag="ranged";}
+  return meta;
+}
+function prepareGameplayClip(clip, key, role, label, scene){
+  if(!clip)return null;
+  const clean=cleanClipLabel(label||clip.name||"clip");
+  clip.name=key+"_"+clean;
+  stripRootMotion(clip, scene, {dropAllPositionTracks:true});
+  clip.userData=Object.assign({},clip.userData||{}, {
+    key, label:clean, role, combat:clipCombatMeta(clean,role)
+  });
+  log("anim clip",key,"→",role,clean,"posDropped=",clip.userData.positionTracksDropped||0,"tracks",clip.userData.tracksAfter,"/",clip.userData.tracksBefore);
+  return clip;
+}
+function emptyAnimSet(source){return {idle:[],walk:[],run:[],attack:[],hit:[],death:[],roar:[],source:source||""};}
+function finalizeAnimSet(key,out){
+  // Natural fallbacks: idle can be walk; run can be walk; hit/death can share death/fall;
+  // attack never falls back to walk unless there is literally no attack clip.
+  if(!out.idle.length && out.walk.length)out.idle.push(out.walk[0]);
+  if(!out.walk.length && out.run.length)out.walk.push(out.run[0]);
+  if(!out.run.length && out.walk.length)out.run.push(out.walk[0]);
+  if(!out.hit.length && out.death.length)out.hit.push(out.death[0]);
+  if(!out.death.length && out.hit.length)out.death.push(out.hit[0]);
+  const total=["idle","walk","run","attack","hit","death","roar"].reduce((a,r)=>a+out[r].length,0);
+  log("anim set",key,"source=",out.source||"none","clips=",total,
+    "idle",out.idle.length,"walk",out.walk.length,"run",out.run.length,"atk",out.attack.length,"hit",out.hit.length,"death",out.death.length,"roar",out.roar.length);
+  return total?out:null;
 }
 function loadAnimClips(key){
   if(ClipCache[key]!==undefined)return Promise.resolve(ClipCache[key]);
@@ -1949,42 +2031,51 @@ function loadAnimClips(key){
   return _clipInFlight[key];
 }
 async function _loadAnimClips(key){
-  const spec=ANIM[key];if(!spec){ClipCache[key]=null;return null;}
+  if(!USE_EXTERNAL_GLTF_ANIMS){ClipCache[key]=null;return null;}
+  const spec=ANIM[key]||{};
+  const folder=animFolderFor(key);
   if(!(await ensureGLTFLoader())||!THREE.GLTFLoader){ClipCache[key]=null;return null;}
-  const out={idle:[],walk:[],run:[],attack:[],hit:[],death:[],roar:[],model:null};
-  const loader=new THREE.GLTFLoader();
-  const dr=getDraco(); if(dr)loader.setDRACOLoader(dr);
-  // single-walk enemies: one file → walk role + rigged model (the file is "withSkin")
-  if(spec.walkFile){
-    const url=animURL(spec.folder,spec.walkFile);
-    await new Promise(res=>{ loader.load(url,g=>{
-      const c=g.animations&&g.animations[0];
-      if(c){ c.userData={label:spec.walkFile}; stripRootMotion(c,g.scene,{dropAllPositionTracks:true}); log("anim strip",key,spec.walkFile,"posDropped=",c.userData.positionTracksDropped||0,"tracks",c.userData.tracksAfter,"/",c.userData.tracksBefore); out.walk.push(c); }
-      out.model=g.scene; res();
-    },undefined,()=>{log("anim miss:",key,spec.walkFile);res();}); });
-    ClipCache[key]=out;return out;
+
+  // 1) New flat layout: one GLB containing all clips for this enemy at /animations/<enemy>.glb.
+  for(const file of animBundleCandidateFiles(key,folder)){
+    const url=animFileURL(file);
+    const g=await fetchParseGLTF(url,key+" bundle");
+    if(!g||!g.animations||!g.animations.length)continue;
+    const out=emptyAnimSet(file); out.bundleScene=g.scene;
+    for(const c0 of g.animations){
+      const role=classifyClipRole(c0.name||file);
+      const c=prepareGameplayClip(c0.clone?c0.clone():c0, key, role, c0.name||file, g.scene);
+      if(c)out[role].push(c);
+    }
+    ClipCache[key]=finalizeAnimSet(key,out);return ClipCache[key];
   }
-  // multi-clip: every file is "_withSkin" → load each label's GLB; keep clip AND (from the
-  // first one) the rigged scene, so the skeleton the clips were authored on IS the model.
-  const roles=["idle","walk","run","attack","hit","death","roar"];
-  const seen={};
-  for(const role of roles){
-    for(const label of (spec[role]||[])){
-      if(seen[label]===undefined){
-        const url=animURL(spec.folder, spec.prefix+label+spec.suffix);
-        seen[label]=await new Promise(res=>{ loader.load(url,g=>{
-          const c=g.animations&&g.animations[0];
-          if(c){ c.userData={label}; stripRootMotion(c, g.scene,{dropAllPositionTracks:true}); log("anim strip",key,label,"posDropped=",c.userData.positionTracksDropped||0,"tracks",c.userData.tracksAfter,"/",c.userData.tracksBefore); }
-          if(!out.model)out.model=g.scene;   // first rigged scene becomes the base model
-          res(c||null);
-        },undefined,()=>{log("anim miss:",key,label);res(null);}); });
+
+  // 2) Legacy fallback: one GLB per action inside /animations/<enemy>/, kept only so older repo commits still run.
+  const out=emptyAnimSet("legacy-folder-files");
+  const loader=new THREE.GLTFLoader(); const dr=getDraco(); if(dr)loader.setDRACOLoader(dr);
+  async function loadLegacyFile(role,label,file){
+    const url=animLegacyURL(folder,file);
+    return await new Promise(res=>{loader.load(url,g=>{
+      const c0=g.animations&&g.animations[0];
+      const rr=role||classifyClipRole(label||file);
+      const c=prepareGameplayClip(c0, key, rr, label||file, g.scene);
+      res(c||null);
+    },undefined,()=>res(null));});
+  }
+  if(spec.walkFile){
+    const c=await loadLegacyFile("walk",spec.walkFile,spec.walkFile);
+    if(c)out.walk.push(c);
+  }else if(spec.prefix&&spec.suffix){
+    const roles=["idle","walk","run","attack","hit","death","roar"];
+    const seen={};
+    for(const role of roles){
+      for(const label of (spec[role]||[])){
+        if(seen[label]===undefined)seen[label]=await loadLegacyFile(role,label,spec.prefix+label+spec.suffix);
+        if(seen[label])out[role].push(seen[label]);
       }
-      if(seen[label])out[role].push(seen[label]);
     }
   }
-  const total=Object.values(out).reduce((a,b)=>a+b.length,0);
-  log("anim clips for",key,"→",total,"loaded");
-  ClipCache[key]=out;return out;
+  ClipCache[key]=finalizeAnimSet(key,out);return ClipCache[key];
 }
 function modelHeight(g){
   const b=new THREE.Box3().setFromObject(g);
@@ -2021,90 +2112,110 @@ function fitModel(src,targetH){
   const minY=isFinite(box.min.y)?box.min.y:0;
   // center horizontally and plant feet at the holder origin
   root.position.set(-cx, -minY, -cz);
+  root.userData=Object.assign({},root.userData||{}, {_baseScale:root.scale.x});
   return holder;
 }
 /* play a role on an entity, cross-fading; one-shots (attack/hit/death) auto-return to locomotion */
+function pickActionForRole(A, role, opts={}){
+  let list=A.clips[role]&&A.clips[role].length?A.clips[role]:null;
+  if(!list){
+    if(role==="run"||role==="idle")list=A.clips.walk;
+    else if(role==="attack")list=A.clips.attack&&A.clips.attack.length?A.clips.attack:A.clips.walk;
+    else return null;
+  }
+  if(!list||!list.length)return null;
+  if(role==="attack"){
+    const d=opts.distance||0;
+    const viable=list.filter(a=>{const m=(a.getClip().userData||{}).combat||{};return d<=((m.reach||HIT_REACH||10)+1.5);});
+    const pool=viable.length?viable:list;
+    return pool[Math.floor(Math.random()*pool.length)];
+  }
+  return opts.index!=null ? list[opts.index%list.length] : list[0];
+}
 function playRole(entity, role, opts={}){
-  const A=entity.userData.animSet;     // {mixer, clips:{role:[action...]}, cur}
-  if(!A||!A.clips)return;
-  const pool=A.clips[role]&&A.clips[role].length?A.clips[role]:null;
-  // fallbacks: attack→walk, run→walk, idle→walk, hit/death→(skip if none)
-  let useRole=role, list=pool;
-  if(!list){ if(role==="run"||role==="idle"||role==="attack")list=A.clips.walk; 
-    else return; useRole="walk"; }
-  if(!list||!list.length)return;
-  const action = opts.index!=null ? list[opts.index%list.length]
-               : (role==="attack" ? list[Math.floor(Math.random()*list.length)]
-               : list[0]);
-  if(!action)return;
-  if(A.cur===action && !opts.force) return;          // already playing this loop
+  const A=entity.userData.animSet;
+  if(!A||!A.clips)return null;
+  const action=pickActionForRole(A,role,opts);
+  if(!action)return null;
+  if(A.cur===action && !opts.force)return action;
   const oneShot=(role==="attack"||role==="hit"||role==="death"||role==="roar");
   const prev=A.cur;
   action.reset();
   action.setLoop(oneShot?THREE.LoopOnce:THREE.LoopRepeat, oneShot?1:Infinity);
   action.clampWhenFinished=(role==="death");
-  action.enabled=true;action.setEffectiveWeight(1);
-  action.timeScale = opts.timeScale || 1;
-  if(prev && prev!==action) action.crossFadeFrom(prev, opts.fade!=null?opts.fade:0.18, false);
+  action.enabled=true;
+  action.setEffectiveWeight(1);
+  action.timeScale=opts.timeScale||1;
+  if(prev&&prev!==action)action.crossFadeFrom(prev, opts.fade!=null?opts.fade:(oneShot?0.08:0.18), false);
   action.play();
   A.cur=action; A.curRole=role;
   if(oneShot){
-    A.busy=true; A.busyUntil=performance.now() + (action.getClip().duration*1000)/(opts.timeScale||1);
+    A.busy=true;
+    A.busyUntil=performance.now()+(action.getClip().duration*1000)/(opts.timeScale||1);
   }
+  return action;
 }
 function applyModel(holder,baseScene,key){
   const targetH=modelHeight(holder);
   const root=fitModel(baseScene,targetH);
   while(holder.children.length)holder.remove(holder.children[0]);
   holder.add(root);
-  const a=holder.userData&&holder.userData.anim;
-  if(a&&!["hover","bob","heavy"].includes(a.kind))holder.userData.anim=null;
-  if(holder.anim&&!["hover","bob","heavy"].includes(holder.anim.kind))holder.anim=null;
+
+  const oldA=holder.userData&&holder.userData.anim;
+  if(oldA&&!['hover','bob','heavy'].includes(oldA.kind))holder.userData.anim=null;
+  if(holder.anim&&!['hover','bob','heavy'].includes(holder.anim.kind))holder.anim=null;
+
   const mixer=new THREE.AnimationMixer(root);MIXERS.push(mixer);
   const set={mixer,clips:{idle:[],walk:[],run:[],attack:[],hit:[],death:[],roar:[]},cur:null,curRole:null,busy:false,busyUntil:0};
   const clipData=ClipCache[key];
   let bound=0;
   if(clipData){
-    for(const role of ["idle","walk","run","attack","hit","death","roar"]){
+    for(const role of ['idle','walk','run','attack','hit','death','roar']){
       for(const clip of (clipData[role]||[])){
-        try{ const act=mixer.clipAction(clip); set.clips[role].push(act); bound++; }catch(e){}
+        try{
+          const act=mixer.clipAction(clip, root);
+          act.enabled=true;
+          set.clips[role].push(act); bound++;
+        }catch(e){log('clip bind fail',key,role,clip&&clip.name,e&&e.message||e);}
       }
     }
   }
-  // Hard pose-lock for translations: store EVERY local position in the upgraded rig/model.
-  // This is stronger than stripping .position tracks: even if an exporter uses an odd track name
-  // or the mixer still touches a node's translation, the frame loop restores positions after
-  // mixer.update(). Rotations/quaternions keep animating, but no child mesh/bone can translate
-  // itself back into the camera/lens.
-  const posLocks=[];
-  root.traverse&&root.traverse(o=>{
-    if(o && o.position) posLocks.push({o, p:o.position.clone()});
-  });
-  holder.userData._posLocks=posLocks;
   holder.userData._modelRoot=root;
   holder.userData._modelRootPos=root.position.clone();
-  // remember the inner rigged node + its planted local transform for per-frame re-anchoring
-  const inner=root.children&&root.children[0]?root.children[0]:null;
-  if(inner){ holder.userData._inner=inner; holder.userData._innerPos=inner.position.clone(); }
-  log("pose-lock",key,"nodes=",posLocks.length);
+  holder.userData._modelRootBasePos=root.position.clone();
   holder.userData.animSet=set;
   holder.userData.hasClips=bound>0;
-  holder.userData.walkOnly = !!(ANIM[key] && ANIM[key].walkFile);
+  holder.userData.walkOnly = !!(holder.userData.hasClips && set.clips.walk.length && !set.clips.attack.length);
+  holder.userData.externalAnimMode = holder.userData.hasClips ? 'static-model+bundle-clips' : 'static-model-procedural';
+
   if(holder.userData.hasClips){
-    if(holder.userData.walkOnly) playRole(holder,"walk",{force:true});
-    else playRole(holder, set.clips.idle.length?"idle":"walk");
-    log("model+anim ready:",key,"· actions bound:",bound);
+    // Position locks remain: rotations animate, translations stay controlled by AR/GPS holder.
+    const posLocks=[];
+    root.traverse&&root.traverse(o=>{ if(o && o.position) posLocks.push({o, p:o.position.clone()}); });
+    holder.userData._posLocks=posLocks;
+    log('pose-lock',key,'nodes=',posLocks.length);
+    playRole(holder, set.clips.idle.length?'idle':'walk', {force:true});
+    log('model+bundle-anim ready:',key,'· actions bound:',bound,
+      'idle',set.clips.idle.length,'walk',set.clips.walk.length,'run',set.clips.run.length,'atk',set.clips.attack.length,'hit',set.clips.hit.length,'death',set.clips.death.length);
+  }else{
+    holder.userData._posLocks=null;
+    holder.userData.anim={kind:'static3d',phase:Math.random()*6.28,baseY:root.position.y};
+    holder.anim=holder.userData.anim;
+    log('static model ready:',key,'· no external clips bound');
   }
 }
 async function tryUpgradeModel(holder,kind){
-  const clipData=await loadAnimClips(kind);          // also yields a rigged scene in .model
-  if(!holder.parent)return;
-  // Prefer the rigged scene that the CLIPS were authored on → skeleton & tracks always match.
-  if(clipData && clipData.model){ applyModel(holder, clipData.model, kind); return; }
-  // No animations for this kind → fall back to the static models/<kind>.glb if present.
-  const data = ModelCache.cache[kind] || await ModelCache.get(kind);
-  if(!data||!holder.parent)return;
-  applyModel(holder, data.scene, kind);
+  // Always use /models/<enemy>.glb as the visible body, then bind clips from /animations.
+  // Never show the animation GLB scene as the AR body; that is what caused lens snapping.
+  let data=null;
+  try{ data = ModelCache.cache[kind] || await ModelCache.get(kind); }catch(e){}
+  if(data && holder.parent){
+    if(USE_EXTERNAL_GLTF_ANIMS){ try{ await loadAnimClips(kind); }catch(e){log('anim load fail',kind,e&&e.message||e);} }
+    if(!holder.parent)return;
+    applyModel(holder, data.scene, kind);
+    return;
+  }
+  log('static model missing; procedural fallback:',kind);
 }
 /* ---- stat blocks + biome pools ---- */
 const ENEMY_STATS={
@@ -2636,6 +2747,20 @@ function animEnemy(e,dt,t){
   const a=e.userData.anim,g=e.userData.animRefs;if(!a)return;
   const ph=e.id*1.7;
   switch(a.kind){
+    case "static3d": {
+      const root=e.userData&&e.userData._modelRoot; if(!root)break;
+      const base=e.userData._modelRootBasePos||root.position;
+      const active=e.userData&&e.userData.state==="active";
+      const moving=active && ((e.userData._gpsDist||99)>(e.userData.boss?BOSS_MIN_DIST:FIGHT_DIST)+0.45);
+      const rate=moving?7.5:(active?4.0:2.0);
+      const bob=(moving?Math.abs(Math.sin(t*rate+ph))*0.055:Math.sin(t*rate+ph)*0.018);
+      root.position.set(base.x,base.y+bob,base.z);
+      root.rotation.z=Math.sin(t*(moving?6:2.2)+ph)*(moving?0.045:0.018);
+      const pulse=1+(active&&!moving?Math.sin(t*5+ph)*0.025:0);
+      root.scale.setScalar((root.userData&&root.userData._baseScale)||root.scale.x||1);
+      root.scale.multiplyScalar(pulse);
+      break;
+    }
     case "hover":
       if(!e.userData||e.userData.state!=="active"){
         const fy=Math.min((e.userData&&e.userData.fly)||a.base||0, 0.5);
@@ -2663,41 +2788,59 @@ function animEnemy(e,dt,t){
   }
 }
 function enemyCombat(e,dt){
-  // movement/positioning is handled by updateWorld; this only swings & lands hits.
+  // movement/positioning is handled by updateWorld; this only times attack windup + damage.
   const u=e.userData;
   if(u._spawnBlocked)return;
   const _cp=camWorldPos();
   const dHoriz=Math.hypot(_cp.x-e.position.x,_cp.z-e.position.z);
-  const gpsD = isFinite(u._gpsDist)?u._gpsDist:dHoriz;
-  const canHit = gpsD<=HIT_REACH && dHoriz<=HIT_REACH+0.2 && dHoriz>=FIGHT_DIST-0.75;
+  const gpsD=isFinite(u._gpsDist)?u._gpsDist:dHoriz;
+  const reach=u._attackReach||HIT_REACH;
+  const canHit = gpsD<=reach && dHoriz<=reach+0.25 && dHoriz>=FIGHT_DIST-0.75;
+
   if(u._wind){
     u.cd-=dt;
-    if(u.cd<=0){ if(canHit)hurtPlayer(u.dmg,"slash"); u._wind=false; u.cd=rand(1.4,2.6); }
+    if(u.cd<=0){
+      if(canHit)hurtPlayer(u.dmg*(u._attackMul||1), u._attackKind||'slash');
+      u._wind=false;
+      u._attackMul=1; u._attackReach=HIT_REACH; u._attackKind='slash';
+      u.cd=rand(0.85,1.65); // short recovery before the next readable attack
+      if(u.hasClips && u.animSet)u.animSet.busy=false;
+    }
     return;
   }
+
   u.cd-=dt;
   if(u.cd<=0 && canHit){
+    const info=attackAnim(e,gpsD);
+    const dur=info&&info.duration?info.duration:0.7;
+    const hitAt=info&&info.hitAt?info.hitAt:0.88;
+    u._attackMul=info&&info.damageMul?info.damageMul:1;
+    u._attackReach=info&&info.reach?info.reach:HIT_REACH;
+    u._attackKind=info&&info.tag?info.tag:'slash';
     u._wind=true;
-    const dur=attackAnim(e);
-    u.cd=dur?dur*0.45:0.6;
+    // The hit lands near the END of the animation, as requested.
+    u.cd=Math.max(0.18, dur*hitAt);
   }
 }
 function locomotion(e,moving,running){
   const u=e.userData;if(!u.hasClips||!u.animSet)return;
-  if(u.walkOnly){ if(u.animSet.curRole!=="walk") playRole(e,"walk"); return; }
-  if(u.animSet.busy && performance.now()<u.animSet.busyUntil)return; // one-shot playing
-  if(u.animSet.busy){u.animSet.busy=false;}                          // one-shot finished
-  const want = running?"run":(moving?"walk":"idle");
-  if(u.animSet.curRole!==want) playRole(e, want);
+  if(u.animSet.busy && performance.now()<u.animSet.busyUntil)return;
+  if(u.animSet.busy){u.animSet.busy=false;}
+  const want=running?'run':(moving?'walk':'idle');
+  if(u.animSet.curRole!==want)playRole(e,want,{distance:u._gpsDist||0});
 }
-function attackAnim(e){ // trigger a random attack one-shot; returns its duration (s)
-  const u=e.userData;if(!u.hasClips||!u.animSet||u.walkOnly){return 0;}
-  if(u.animSet.busy && performance.now()<u.animSet.busyUntil)return 0;
-  playRole(e,"attack");
-  const a=u.animSet.cur;return a?a.getClip().duration:0.6;
+function attackAnim(e,dist=0){
+  const u=e.userData;
+  if(!u.hasClips||!u.animSet||!u.animSet.clips.attack.length)return {duration:0.65,hitAt:.88,damageMul:1,reach:HIT_REACH,tag:'slash'};
+  if(u.animSet.busy && performance.now()<u.animSet.busyUntil)return null;
+  const action=playRole(e,'attack',{distance:dist,fade:0.06});
+  if(!action)return {duration:0.65,hitAt:.88,damageMul:1,reach:HIT_REACH,tag:'slash'};
+  const clip=action.getClip();
+  const meta=(clip.userData&&clip.userData.combat)||{};
+  return {duration:clip.duration||0.7, hitAt:meta.hitAt||.88, damageMul:meta.damageMul||1, reach:meta.reach||HIT_REACH, tag:meta.tag||'slash'};
 }
-function hitAnim(e){const u=e.userData;if(u.hasClips&&u.animSet&&!u.walkOnly)playRole(e,"hit",{fade:0.06});}
-function deathAnim(e){const u=e.userData;if(u.hasClips&&u.animSet&&!u.walkOnly){playRole(e,"death",{fade:0.05});return (u.animSet.cur?u.animSet.cur.getClip().duration:0.8);}return 0;}
+function hitAnim(e){const u=e.userData;if(u.hasClips&&u.animSet&&u.animSet.clips.hit.length)playRole(e,'hit',{fade:0.05});}
+function deathAnim(e){const u=e.userData;if(u.hasClips&&u.animSet&&u.animSet.clips.death.length){const a=playRole(e,'death',{fade:0.05});return a&&a.getClip()?a.getClip().duration:0.8;}return 0;}
 function syncEntityGPS(e){
   // While active, the enemy lives in local combat space and its GPS anchor simply
   // tracks the player so it never drifts away. (No inverse transform → no runaway.)
