@@ -2197,6 +2197,7 @@ function updateWorld(dt){
   const head=(G.heading||0)*Math.PI/180;
   // The player's REAL scene position (tracks the headset in XR, fixed in flat mode).
   const _cp=camWorldPos(); const cpx=_cp.x, cpz=_cp.z;
+<<<<<<< HEAD
   const headReady = !(G.xr && Math.abs(_cp.x)<0.05 && Math.abs(_cp.z)<0.05 && Math.abs(_cp.y)<0.05);
   if(!headReady){ for(const e of G.world)e.visible=false; }   // tracking not locked → show nothing
   for(let i=G.world.length-1;i>=0;i--){
@@ -2205,15 +2206,28 @@ function updateWorld(dt){
     const dN=(u.lat-G.lat)*mlat, dE=(u.lon-G.lon)*mlon;
     let trueDist=Math.hypot(dN,dE);
     if(trueDist>VISIBLE_R){e.visible=false;continue;}
+=======
+  for(let i=G.world.length-1;i>=0;i--){
+    const e=G.world[i],u=e.userData;
+    const dN=(u.lat-G.lat)*mlat, dE=(u.lon-G.lon)*mlon;
+    let trueDist=Math.hypot(dN,dE);
+    if(trueDist>VISIBLE_R){e.visible=false;continue;}
+    e.visible=true;
+>>>>>>> 03904c9aa24c8405db0437987208c9b8cd139e60
     if(u.bearing===undefined) u.bearing = trueDist>0.5 ? Math.atan2(dE,dN) : Math.random()*Math.PI*2;
     if(trueDist>0.5) u.bearing = Math.atan2(dE,dN);
     if(u.appDist===undefined){
       u.appDist = G.demo ? 40 : Math.max(trueDist, FIGHT_DIST);
       const rel0=u.bearing-head, d0=u.appDist;
+<<<<<<< HEAD
       e.position.set(cpx+Math.sin(rel0)*d0, FLOOR+(u.fly?Math.min(u.fly,0.5):0), cpz-Math.cos(rel0)*d0);
       u._placed=true;                            // now it has a real spot → safe to show
     }
     e.visible = !!u._placed;                     // never visible at the origin/lens
+=======
+      e.position.set(cpx+Math.sin(rel0)*d0, FLOOR+(u.fly?Math.min(u.fly,0.9):0), cpz-Math.cos(rel0)*d0);
+    }
+>>>>>>> 03904c9aa24c8405db0437987208c9b8cd139e60
     if(G.invisible && u.state==="active"){u.state="idle";u._wind=false;
       if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}}
     if(!inGrace && !G.invisible && u.state!=="active" && u.state!=="dead" && u.appDist<PURSUE_R){
@@ -2239,11 +2253,14 @@ function updateWorld(dt){
     e.position.z += (tz-e.position.z)*lerp;
     const ty = FLOOR + (u.fly?Math.min(u.fly,0.5):0);
     e.position.y += (ty-e.position.y)*Math.min(1,dt*6);
+<<<<<<< HEAD
     // HARD vertical clamp: feet must stay between the floor and a low ceiling that is
     // always well below your head — so NO enemy ever appears at or above head height.
     const CEIL = FLOOR + 0.6;
     if(e.position.y > CEIL) e.position.y = CEIL;
     if(e.position.y < FLOOR-0.2) e.position.y = FLOOR;
+=======
+>>>>>>> 03904c9aa24c8405db0437987208c9b8cd139e60
     // HARD personal-space ring on the ACTUAL position: whatever the lerp or your own
     // movement did, never let the enemy sit inside HARD_MIN — shove it straight back out.
     let ddx=e.position.x-cpx, ddz=e.position.z-cpz, realD=Math.hypot(ddx,ddz);
@@ -2252,7 +2269,11 @@ function updateWorld(dt){
       const k=HARD_MIN/realD;
       e.position.x=cpx+ddx*k; e.position.z=cpz+ddz*k;
     }
+<<<<<<< HEAD
     e.lookAt(cpx, e.position.y, cpz); u._placed=true; if(!e.visible)e.visible=true;
+=======
+    e.lookAt(cpx, e.position.y, cpz);
+>>>>>>> 03904c9aa24c8405db0437987208c9b8cd139e60
     if(u.state==="dead"){
     } else if(u.state==="active"){
       if(u.hasClips) locomotion(e, u.appDist>HARD_MIN+0.3, u.appDist>HARD_MIN+0.3);
