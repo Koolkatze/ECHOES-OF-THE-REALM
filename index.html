@@ -1310,6 +1310,8 @@ function nearestCluster(lat,lon){
   return best&&bd<Math.max(HEAT.cell,70)?best:null;
 }
 function buildEncounter(spot,isBoss){
+  log("legacy buildEncounter blocked: persistent GPS world handles enemies");
+  return;
   clearEncounter();
   // if standing in/near a heat cluster, use its biome + enemy count
   G._activeCluster=(!isBoss&&G.lat!=null)?nearestCluster(G.lat,G.lon):null;
@@ -1896,7 +1898,7 @@ function stripRootMotion(clip, scene){
   if(scene){
     scene.traverse&&scene.traverse(o=>{
       const n=(o.name||"").toLowerCase();
-      if(/hip|pelvis|root|armature|spine_?0|mixamorig:?hips/.test(n)) rootNames.add(o.name);
+      if(/hip|hips|pelvis|root|armature|spine_?0|mixamorig:?hips|bip001|metarig|scene|motion/.test(n)) rootNames.add(o.name);
     });
     // also the first object with children directly under scene
     if(scene.children&&scene.children[0]) rootNames.add(scene.children[0].name);
@@ -1908,7 +1910,7 @@ function stripRootMotion(clip, scene){
       const bare=node.indexOf("/")>=0?node.slice(node.lastIndexOf("/")+1):node;
       if(rootNames.has(node)||rootNames.has(bare)) return false;
       // also drop any position track at the very top of the hierarchy by heuristic name
-      if(/hip|pelvis|root|armature|mixamorig:?hips/i.test(bare)) return false;
+      if(/hip|hips|pelvis|root|armature|mixamorig:?hips|bip001|metarig|scene|motion/i.test(bare)) return false;
     }
     return true;
   });
@@ -1929,7 +1931,8 @@ async function _loadAnimClips(key){
   if(spec.walkFile){
     const url=animURL(spec.folder,spec.walkFile);
     await new Promise(res=>{ loader.load(url,g=>{
-      if(g.animations&&g.animations[0])out.walk.push(g.animations[0]);
+      const c=g.animations&&g.animations[0];
+      if(c){ c.userData={label:spec.walkFile}; stripRootMotion(c,g.scene); out.walk.push(c); }
       out.model=g.scene; res();
     },undefined,()=>{log("anim miss:",key,spec.walkFile);res();}); });
     ClipCache[key]=out;return out;
@@ -2210,8 +2213,11 @@ function makeWorldBoss(lat,lon){
   const m=applyRealism((BOSS_BUILDERS[b.type]||BOSS_BUILDERS.knight)(),b.type);
   tryUpgradeModel(m,"boss_"+b.type);
   m.visible=false;
+  const fy=(typeof G!=="undefined"&&isFinite(G.floorY))?G.floorY:0;
+  m.position.set(0, fy, -999);                  // never flashes at the camera origin before placement
   m.userData={boss:true,world:true,hp:240,hpMax:240,phase:0,state:"idle",cd:2,combo:[],comboT:0,
-    speed:.5,name:b.name,dmg:14,lat,lon,homeLat:lat,homeLon:lon,introDone:false};
+    speed:.5,name:b.name,dmg:14,lat,lon,homeLat:lat,homeLon:lon,introDone:false,_placed:false,
+    bearing:undefined,_wind:false};
   m.anim=m.anim;scene.add(m);G.world.push(m);G.boss=m;return m;
 }
 function buildWorld(){
@@ -2256,79 +2262,108 @@ function updateWorld(dt){
   const FLOOR=G.floorY;
   const {mlat,mlon}=metersPerDeg(G.lat);
   const head=(G.heading||0)*Math.PI/180;
-  // The player's REAL scene position (tracks the headset in XR, fixed in flat mode).
   const _cp=camWorldPos(); const cpx=_cp.x, cpz=_cp.z;
   const headReady = !(G.xr && Math.abs(_cp.x)<0.05 && Math.abs(_cp.z)<0.05 && Math.abs(_cp.y)<0.05);
-  if(!headReady){ for(const e of G.world)e.visible=false; }   // tracking not locked → show nothing
+  if(!headReady){ for(const e of G.world)e.visible=false; return; }
+
   for(let i=G.world.length-1;i>=0;i--){
     const e=G.world[i],u=e.userData;
-    if(!headReady){ continue; }                 // wait for valid head tracking before placing
-    const dN=(u.lat-G.lat)*mlat, dE=(u.lon-G.lon)*mlon;
+    if(!u||u.dead){continue;}
+
+    // GPS vector from player → enemy. This is the source of truth.
+    let dN=(u.lat-G.lat)*mlat, dE=(u.lon-G.lon)*mlon;
     let trueDist=Math.hypot(dN,dE);
-    if(trueDist>VISIBLE_R){e.visible=false;continue;}
-    if(u.bearing===undefined) u.bearing = trueDist>0.5 ? Math.atan2(dE,dN) : Math.random()*Math.PI*2;
-    if(trueDist>0.5) u.bearing = Math.atan2(dE,dN);
-    if(u.appDist===undefined){
-      u.appDist = G.demo ? 40 : Math.max(trueDist, FIGHT_DIST);
-      const rel0=u.bearing-head, d0=u.appDist;
+
+    if(trueDist>0.5) u.bearing=Math.atan2(dE,dN);
+    else if(u.bearing===undefined) u.bearing=Math.random()*Math.PI*2;
+
+    const HARD_MIN = u.boss?BOSS_MIN_DIST:(u.fly?FLY_MIN_DIST:FIGHT_DIST);
+    const visibleNow = trueDist<=VISIBLE_R || u.state==="active";
+    if(!visibleNow){ e.visible=false; continue; }
+
+    // First visibility: place instantly at its real GPS-derived distance, never at origin/lens.
+    if(!u._placed){
+      const rel0=(u.bearing||0)-head;
+      const d0=Math.max(trueDist,HARD_MIN);
       e.position.set(cpx+Math.sin(rel0)*d0, FLOOR+(u.fly?Math.min(u.fly,0.5):0), cpz-Math.cos(rel0)*d0);
-      u._placed=true;                            // now it has a real spot → safe to show
+      u._placed=true;
     }
-    e.visible = !!u._placed;                     // never visible at the origin/lens
-    if(G.invisible && u.state==="active"){u.state="idle";u._wind=false;
-      if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}}
-    if(!inGrace && !G.invisible && u.state!=="active" && u.state!=="dead" && u.appDist<PURSUE_R){
+    e.visible=true;
+
+    if(G.invisible && u.state==="active"){
+      u.state="idle";u._wind=false;
+      if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}
+    }
+
+    // Once an enemy is visible/near enough, it starts a real GPS chase.
+    if(!inGrace && !G.invisible && u.state!=="active" && u.state!=="dead" && trueDist<PURSUE_R){
       u.state="active"; if(u.boss&&!u.introDone)bossIntro(e);
     }
-    let targetDist;
+
+    // Pursuit is NOT visual-only: move the enemy's GPS anchor toward the player.
+    // That makes the approach smooth and keeps the rendered model tied to the map/heat zone.
     if(u.state==="active"){
-      targetDist = u.boss?BOSS_MIN_DIST:(u.fly?FLY_MIN_DIST:FIGHT_DIST);
-    } else {
-      targetDist = trueDist<=35?trueDist:35+(trueDist-35)*0.5;
-      targetDist = Math.max(targetDist, FIGHT_DIST);
+      if(trueDist>HARD_MIN+0.15){
+        const chaseSpeed = u.boss ? Math.max(0.6,u.speed*1.4) : Math.max(0.9,u.speed*2.4+0.4);
+        const step=Math.min(trueDist-HARD_MIN, chaseSpeed*dt);
+        if(step>0 && trueDist>0.001){
+          u.lat += (-dN/trueDist)*step/mlat;
+          u.lon += (-dE/trueDist)*step/mlon;
+          dN=(u.lat-G.lat)*mlat; dE=(u.lon-G.lon)*mlon;
+          trueDist=Math.hypot(dN,dE);
+          if(trueDist>0.5) u.bearing=Math.atan2(dE,dN);
+        }
+      }else if(trueDist<HARD_MIN-0.05){
+        // Never let the logical enemy anchor cross into the camera/lens.
+        const br=(u.bearing!==undefined)?u.bearing:Math.random()*Math.PI*2;
+        u.lat=G.lat+Math.cos(br)*HARD_MIN/mlat;
+        u.lon=G.lon+Math.sin(br)*HARD_MIN/mlon;
+        dN=(u.lat-G.lat)*mlat; dE=(u.lon-G.lon)*mlon; trueDist=HARD_MIN; u.bearing=br;
+      }
     }
-    const closeRate = (u.state==="active") ? (u.speed*1.6+0.4) : 4.0;
-    if(u.appDist>targetDist) u.appDist = Math.max(targetDist, u.appDist - closeRate*dt);
-    else                     u.appDist = Math.min(targetDist, u.appDist + closeRate*dt);
-    const HARD_MIN = u.boss?BOSS_MIN_DIST:(u.fly?FLY_MIN_DIST:FIGHT_DIST);
-    if(u.appDist < HARD_MIN) u.appDist = HARD_MIN;
-    const rel = u.bearing - head;
-    const tx = cpx + Math.sin(rel) * u.appDist;
-    const tz = cpz - Math.cos(rel) * u.appDist;
-    const lerp = (u.state==="active")?Math.min(1,dt*6):Math.min(1,dt*4);
+
+    const renderDist=Math.max(trueDist,HARD_MIN);
+    u.appDist=renderDist; // kept for debug/combat logs, but no longer drives fake approach.
+    const rel=(u.bearing||0)-head;
+    const tx=cpx+Math.sin(rel)*renderDist;
+    const tz=cpz-Math.cos(rel)*renderDist;
+    const lerp=(u.state==="active")?Math.min(1,dt*7):Math.min(1,dt*4);
     e.position.x += (tx-e.position.x)*lerp;
     e.position.z += (tz-e.position.z)*lerp;
-    const ty = FLOOR + (u.fly?Math.min(u.fly,0.5):0);
+    const ty=FLOOR+(u.fly?Math.min(u.fly,0.5):0);
     e.position.y += (ty-e.position.y)*Math.min(1,dt*6);
-    // HARD vertical clamp: feet must stay between the floor and a low ceiling that is
-    // always well below your head — so NO enemy ever appears at or above head height.
-    const CEIL = FLOOR + 0.6;
-    if(e.position.y > CEIL) e.position.y = CEIL;
-    if(e.position.y < FLOOR-0.2) e.position.y = FLOOR;
-    // HARD personal-space ring on the ACTUAL position: whatever the lerp or your own
-    // movement did, never let the enemy sit inside HARD_MIN — shove it straight back out.
+
+    // Hard spatial clamps: floor-bound, below head height, and outside personal space.
+    const CEIL=FLOOR+0.6;
+    if(e.position.y>CEIL)e.position.y=CEIL;
+    if(e.position.y<FLOOR-0.2)e.position.y=FLOOR;
     let ddx=e.position.x-cpx, ddz=e.position.z-cpz, realD=Math.hypot(ddx,ddz);
     if(realD<HARD_MIN){
-      if(realD<1e-3){ ddx=Math.sin(rel); ddz=-Math.cos(rel); realD=1; }
+      if(realD<1e-3){ddx=Math.sin(rel);ddz=-Math.cos(rel);realD=1;}
       const k=HARD_MIN/realD;
-      e.position.x=cpx+ddx*k; e.position.z=cpz+ddz*k;
+      e.position.x=cpx+ddx*k;e.position.z=cpz+ddz*k;
     }
-    e.lookAt(cpx, e.position.y, cpz); u._placed=true; if(!e.visible)e.visible=true;
+
+    e.lookAt(cpx,e.position.y,cpz);
+    const moving = u.state==="active" && trueDist>HARD_MIN+0.35;
     if(u.state==="dead"){
-    } else if(u.state==="active"){
-      if(u.hasClips) locomotion(e, u.appDist>HARD_MIN+0.3, u.appDist>HARD_MIN+0.3);
+    }else if(u.state==="active"){
+      if(u.hasClips) locomotion(e,moving,moving);
       else animEnemy(e,dt,clock.elapsedTime);
       if(u.boss) bossCombat(e,dt); else enemyCombat(e,dt);
-    } else {
-      if(u.hasClips) locomotion(e, Math.abs(u.appDist-targetDist)>0.2, false);
+    }else{
+      if(u.hasClips) locomotion(e,false,false);
       else animEnemy(e,dt,clock.elapsedTime);
     }
-    if(u.state==="active" && trueDist>PURSUE_R*1.3 && !G.demo){
-      u.state="idle"; if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}
+
+    if(u.state==="active" && trueDist>PURSUE_R*1.5 && !G.demo){
+      u.state="idle";u._wind=false;
+      if(u.boss){u.introDone=false;clearBossArena();$("bossbar").style.display="none";}
     }
     if(G._dbgOn && u.state==="active" && (!G._dbgT||performance.now()-G._dbgT>1000)){
       G._dbgT=performance.now();
-      log("DBG",u.kind||"?","app=",u.appDist.toFixed(1),"real=",Math.hypot(e.position.x-cpx,e.position.z-cpz).toFixed(1),
+      log("DBG",u.kind||"?","render=",renderDist.toFixed(1),"gps=",trueDist.toFixed(1),
+        "real=",Math.hypot(e.position.x-cpx,e.position.z-cpz).toFixed(1),
         "eY=",e.position.y.toFixed(2),"floor=",FLOOR.toFixed(2),"headY=",camWorldPos().y.toFixed(2),
         "floorRef=",!!G._hasFloorRef,"xr=",!!G.xr);
     }
@@ -2337,11 +2372,12 @@ function updateWorld(dt){
     G._censusT=performance.now();
     let vis=0,near=1e9;
     for(const e of G.world){ if(e.visible)vis++;
-      const dd=Math.hypot((e.userData.lat-G.lat)*mlat,(e.userData.lon-G.lon)*mlon);
+      const u=e.userData;if(!u)continue;
+      const dd=Math.hypot((u.lat-G.lat)*mlat,(u.lon-G.lon)*mlon);
       if(dd<near)near=dd; }
     log("CENSUS world=",G.world.length,"visible=",vis,"nearest=",near.toFixed(0),"m  VISIBLE_R=",VISIBLE_R,"demo=",!!G.demo);
   }
-  const near=G.world.some(e=>e.userData.state==="active");
+  const near=G.world.some(e=>e.userData&&e.userData.state==="active");
   if(near!==G._inCombat){G._inCombat=near; $("hint").textContent=near?t("foes_upon"):"";}
 }
 let arenaGroup=null;
@@ -2362,7 +2398,7 @@ function buildBossArena(){
   const type=G.legend.boss.type, A=BOSS_ARENA[type]||BOSS_ARENA.knight;
   arenaGroup=new THREE.Group();scene.add(arenaGroup);
   scene.fog=new THREE.FogExp2(A.fog,0.10);
-  const cx=camera.position.x, cz=camera.position.z;
+  const _bp=camWorldPos(); const cx=_bp.x, cz=_bp.z;
   // ring of props around the player at 2.5–5 m, floor-anchored
   const count=10;
   for(let i=0;i<count;i++){
