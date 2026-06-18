@@ -2093,6 +2093,24 @@ function cloneRigged(src){
   if(SU && SU.clone){ try{ return SU.clone(src); }catch(e){ log("SkeletonUtils.clone failed:",e.message); } }
   return src.clone(true);
 }
+// True rest-pose skinned bounds: samples ACTUAL skinned vertex world positions. Needed because
+// some rigs author the visible mesh under an Armature scaled ~0.01 while the geometry itself is
+// full-size — Box3.setFromObject then reports ~1/100th of the real height, so fitModel would
+// compute a ~100x bogus scale and fling the skinned mesh onto the camera lens. Returns null when
+// the rest pose is collapsed (Unreal "baselayer" single-clip rigs) so callers fall back cleanly.
+function skinnedRestBox(root){
+  if(!root||!root.traverse)return null;
+  root.updateMatrixWorld(true);
+  const box=new THREE.Box3(), v=new THREE.Vector3(); let any=false;
+  root.traverse(o=>{
+    if(o.isSkinnedMesh && o.skeleton && o.geometry && o.geometry.attributes && o.geometry.attributes.position){
+      try{ o.skeleton.update(); }catch(e){}
+      const pos=o.geometry.attributes.position, n=pos.count, step=Math.max(1,Math.floor(n/1500));
+      for(let i=0;i<n;i+=step){ try{ o.boneTransform(i,v); v.applyMatrix4(o.matrixWorld); box.expandByPoint(v); any=true; }catch(e){} }
+    }
+  });
+  return (any && isFinite(box.min.y) && !box.isEmpty()) ? box : null;
+}
 function fitModel(src,targetH){
   const root=cloneRigged(src);
   root.traverse(o=>{if(o.isMesh){o.castShadow=false;o.frustumCulled=false;
@@ -2104,36 +2122,21 @@ function fitModel(src,targetH){
   const holder=new THREE.Group();
   holder.add(root);
   holder.updateMatrixWorld(true);
-  let box=new THREE.Box3().setFromObject(root);
-  let size=box.getSize(new THREE.Vector3());
-  let h=size.y; if(!isFinite(h)||h<1e-3) h=1;          // guard degenerate skinned-bind box
+  // Measure height from TRUE rest-pose skinned bounds; fall back to the bind-pose box only when
+  // the rest pose is collapsed (single-clip "baselayer" rigs) — identical to the old path for them.
+  let box=skinnedRestBox(root);
+  let h=box?box.getSize(new THREE.Vector3()).y:0;
+  if(!isFinite(h)||h<0.3){ box=new THREE.Box3().setFromObject(root); h=box.getSize(new THREE.Vector3()).y; if(!isFinite(h)||h<1e-3) h=1; }
   const sc=targetH/h;
   root.scale.setScalar(sc);
   holder.updateMatrixWorld(true);
-  box=new THREE.Box3().setFromObject(root);
-  size=box.getSize(new THREE.Vector3());
-  const cx=isFinite(box.min.x)?(box.min.x+box.max.x)/2:0;
-  const cz=isFinite(box.min.z)?(box.min.z+box.max.z)/2:0;
-  const minY=isFinite(box.min.y)?box.min.y:0;
+  let box2=skinnedRestBox(root); if(!box2) box2=new THREE.Box3().setFromObject(root);
+  const cx=isFinite(box2.min.x)?(box2.min.x+box2.max.x)/2:0;
+  const cz=isFinite(box2.min.z)?(box2.min.z+box2.max.z)/2:0;
+  const minY=isFinite(box2.min.y)?box2.min.y:0;
   // center horizontally and plant feet at the holder origin
   root.position.set(-cx, -minY, -cz);
-  root.userData=Object.assign({},root.userData||{}, {_baseScale:root.scale.x});
-  // RE-BIND skinned meshes at the new scale + rest pose. Meshy/Unreal multi-clip rigs are
-  // authored in CENTIMETRES (bones tens of units from origin), so fitModel scales them ~0.01
-  // to metres. That rescale invalidates each SkinnedMesh's bind matrix and the skeleton's
-  // inverse-bind matrices (captured at the original cm scale) → skinned vertices fly to the
-  // lens. Recomputing them from the current (rest-pose, rescaled) world matrices fixes it.
-  // Metre-scale single-clip rigs scale ~1, so this is a no-op for them.
-  holder.updateMatrixWorld(true);
-  root.traverse(o=>{
-    if(o.isSkinnedMesh && o.skeleton){
-      try{
-        o.skeleton.calculateInverses();            // rest-pose inverse binds at the new scale
-        o.bindMatrix.copy(o.matrixWorld);          // bind matrix = mesh world at rest, new scale
-        o.bindMatrixInverse.copy(o.matrixWorld).invert();
-      }catch(e){ log("skinned rebind fail:",e&&e.message||e); }
-    }
-  });
+  root.userData=Object.assign({},root.userData||{}, {_baseScale:root.scale.x, _fitH:(+h).toFixed(2), _fitSc:(+sc).toFixed(2)});
   return holder;
 }
 /* play a role on an entity, cross-fading; one-shots (attack/hit/death) auto-return to locomotion */
@@ -3858,7 +3861,7 @@ $("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();
 /* surface any load/runtime error so we never get a silent dead UI */
 addEventListener("error",e=>{ try{ log("JS ERROR:", e.message, "@", (e.filename||"").split("/").pop()+":"+e.lineno); }catch(_){}});
 addEventListener("unhandledrejection",e=>{ try{ log("PROMISE REJECT:", (e.reason&&e.reason.message)||e.reason); }catch(_){}});
-log("BUILD READY v=combat-pos-7 · handlers wired");
+log("BUILD READY v=skinfit-8 · handlers wired");
 </script>
 </body>
 </html>
