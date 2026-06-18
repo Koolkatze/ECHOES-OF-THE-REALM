@@ -1827,6 +1827,7 @@ async function testModels(){
   toast(found+"/"+all.length+" models found — details in 🐞",3500);
 }
 const MIXERS=[];
+const _faceV1=new THREE.Vector3(), _faceV2=new THREE.Vector3();
 /* ===================================================================
    ANIMATION MANIFEST — per enemy/boss, the animation GLB files in
    animations/<folder>/, classified by gameplay role.
@@ -2137,6 +2138,7 @@ function fitModel(src,targetH){
   // center horizontally and plant feet at the holder origin
   root.position.set(-cx, -minY, -cz);
   root.userData=Object.assign({},root.userData||{}, {_baseScale:root.scale.x, _fitH:(+h).toFixed(2), _fitSc:(+sc).toFixed(2)});
+  holder.userData=Object.assign({},holder.userData||{}, {_inner:root});
   return holder;
 }
 /* play a role on an entity, cross-fading; one-shots (attack/hit/death) auto-return to locomotion */
@@ -2218,6 +2220,21 @@ function applyModel(holder,baseScene,key){
     root.traverse&&root.traverse(o=>{ if(o && o.position) posLocks.push({o, p:o.position.clone()}); });
     holder.userData._posLocks=posLocks;
     log('pose-lock',key,'nodes=',posLocks.length);
+    // Facing lock calibration: record the pelvis (hip-line) orientation at REST so the
+    // render loop can hold the body at that facing through spin/turn clips. The holder
+    // itself lookAt()s the camera, so "rest facing" == "facing you". Anchored on the hip
+    // bones to stay robust across each rig's odd bone bases; skipped if absent.
+    try{
+      const _inner=(root.userData&&root.userData._inner)||root;
+      let _L=null,_R=null; _inner.traverse(o=>{ if(o.isBone){ if(o.name==='LeftUpLeg')_L=o; else if(o.name==='RightUpLeg')_R=o; } });
+      if(_L&&_R){
+        _inner.updateWorldMatrix(true,true);
+        const _lw=_L.getWorldPosition(new THREE.Vector3()), _rw=_R.getWorldPosition(new THREE.Vector3());
+        _inner.worldToLocal(_lw); _inner.worldToLocal(_rw);
+        holder.userData._face={ wrap:root, inner:_inner, L:_L, R:_R, restAz:Math.atan2(_rw.x-_lw.x, _rw.z-_lw.z) };
+        log('face-lock armed',key);
+      }
+    }catch(_e){ log('face-cal fail',_e&&_e.message||_e); }
     playRole(holder, set.clips.idle.length?'idle':'walk', {force:true});
     log('model+bundle-anim ready:',key,'· actions bound:',bound,
       'idle',set.clips.idle.length,'walk',set.clips.walk.length,'run',set.clips.run.length,'atk',set.clips.attack.length,'hit',set.clips.hit.length,'death',set.clips.death.length);
@@ -2364,12 +2381,12 @@ function sampleHitTest(xrFrame){
 }
 G.worldBuilt=false;
 const ENGAGE_R=20;      // legacy UI/debug only
-const FIGHT_DIST=10.0;  // metres: melee enemies STOP here; never glued to the lens
-const HIT_REACH=10.9;   // metres: attack can land only around the fight ring
+const FIGHT_DIST=2.0;   // metres: melee enemies close to real arm's-reach and attack here
+const HIT_REACH=2.7;    // metres: attack lands around the 2 m fight ring
 const PURSUE_R=45;      // metres: enemy gives chase after being visible for a moment
 const VISIBLE_R=60;     // metres: enemies are first drawn at real world distance
-const FLY_MIN_DIST=9.0; // flying foes also keep real personal space
-const BOSS_MIN_DIST=13.0;// bosses keep a wider ring so large models stay fully in frame
+const FLY_MIN_DIST=2.5; // flying foes keep a touch more personal space (they sit at head height)
+const BOSS_MIN_DIST=4.0; // bosses keep a slightly wider ring so large models stay in frame
 const SAFE_SPAWN_MIN=34; // no newly created foe may be closer than this to the player
 const SAFE_SPAWN_MAX=58; // live spawns appear near the edge of visibility, then walk in
 const SPAWN_GRACE_MS=6500; // visible-but-not-hostile grace after spawning/entering AR
@@ -3641,6 +3658,20 @@ function loop(time,xrFrame){
   }
   for(const e of G.world) restorePosLocks(e);
   if(G.boss) restorePosLocks(G.boss);
+  // Hold each rigged body at its rest facing (which lookAt has pointed at the camera) so
+  // spin/turn animations can't make a foe attack with its back to you. Measured below the
+  // wrapper we rotate, so there is no feedback loop.
+  function faceCorrect(ent){
+    const f=ent&&ent.userData&&ent.userData._face; if(!f||!f.L||!f.R||!f.inner||!f.wrap)return;
+    f.inner.updateWorldMatrix(true,true);
+    const lw=f.L.getWorldPosition(_faceV1), rw=f.R.getWorldPosition(_faceV2);
+    f.inner.worldToLocal(lw); f.inner.worldToLocal(rw);
+    const curAz=Math.atan2(rw.x-lw.x, rw.z-lw.z);
+    let dy=f.restAz-curAz; dy=Math.atan2(Math.sin(dy),Math.cos(dy));
+    f.wrap.rotation.y=dy;
+  }
+  for(const e of G.world) faceCorrect(e);
+  if(G.boss) faceCorrect(G.boss);
   handSwing(dt);
   renderer.render(scene,camera);
  }catch(err){
@@ -3861,7 +3892,7 @@ $("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();
 /* surface any load/runtime error so we never get a silent dead UI */
 addEventListener("error",e=>{ try{ log("JS ERROR:", e.message, "@", (e.filename||"").split("/").pop()+":"+e.lineno); }catch(_){}});
 addEventListener("unhandledrejection",e=>{ try{ log("PROMISE REJECT:", (e.reason&&e.reason.message)||e.reason); }catch(_){}});
-log("BUILD READY v=skinfit-8 · handlers wired");
+log("BUILD READY v=face2m-9 · handlers wired");
 </script>
 </body>
 </html>
