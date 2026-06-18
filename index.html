@@ -2118,6 +2118,22 @@ function fitModel(src,targetH){
   // center horizontally and plant feet at the holder origin
   root.position.set(-cx, -minY, -cz);
   root.userData=Object.assign({},root.userData||{}, {_baseScale:root.scale.x});
+  // RE-BIND skinned meshes at the new scale + rest pose. Meshy/Unreal multi-clip rigs are
+  // authored in CENTIMETRES (bones tens of units from origin), so fitModel scales them ~0.01
+  // to metres. That rescale invalidates each SkinnedMesh's bind matrix and the skeleton's
+  // inverse-bind matrices (captured at the original cm scale) → skinned vertices fly to the
+  // lens. Recomputing them from the current (rest-pose, rescaled) world matrices fixes it.
+  // Metre-scale single-clip rigs scale ~1, so this is a no-op for them.
+  holder.updateMatrixWorld(true);
+  root.traverse(o=>{
+    if(o.isSkinnedMesh && o.skeleton){
+      try{
+        o.skeleton.calculateInverses();            // rest-pose inverse binds at the new scale
+        o.bindMatrix.copy(o.matrixWorld);          // bind matrix = mesh world at rest, new scale
+        o.bindMatrixInverse.copy(o.matrixWorld).invert();
+      }catch(e){ log("skinned rebind fail:",e&&e.message||e); }
+    }
+  });
   return holder;
 }
 /* play a role on an entity, cross-fading; one-shots (attack/hit/death) auto-return to locomotion */
