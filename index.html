@@ -157,7 +157,6 @@
   <div class="rune-divider"></div>
   <button class="btn" id="btnBegin" data-i18n="begin">Begin the Pilgrimage</button>
   <button class="btn" id="btnContinue" style="display:none" data-i18n="continue">Continue a Pilgrimage</button>
-  <button class="btn ghost" id="btnDemo" data-i18n="demo">Wander a Phantom Realm (no GPS)</button>
   <button class="btn ghost" id="btnSettings" data-i18n="settings">⚙ Settings</button>
   <div class="small" data-i18n="intro_blurb">The Herald — a thunder-light torn from the future — will weave a dark legend from the true history of wherever you stand. Walk to real places. Slay what waits there. Face the Echo at the end.</div>
 </div>
@@ -661,7 +660,7 @@ function loadSlot(n){
   const d=Store.get(SLOT_KEY(n),null);if(!d)return false;
   activeSlot=n;
   G.legend=d.legend;G.spots=d.spots;G.spotIndex=Math.min(d.spotIndex,d.spots.length-1);
-  G.player=d.player;G.inv=d.inv;G.demo=d.demo;G._noteIdx=d.noteIdx;
+  G.player=d.player;G.inv=d.inv;G.demo=false;G._noteIdx=d.noteIdx; // demo removed: old demo saves load as GPS
   G.env=d.env||"town";if(d.stats)G.stats=d.stats;G.kills=d.kills||{};applyStats();
   if(d.heat&&d.heat.grid){Object.assign(HEAT,d.heat);}G.heatCenter=d.heatCenter||null;
   G.equipped.weapon=G.inv.find(i=>i.id===d.equippedW)||null;
@@ -1976,16 +1975,22 @@ function cleanClipLabel(name){
 }
 function classifyClipRole(name){
   const raw=String(name||"");
+  // Single-clip walk-only exports use this exact track name → it's a walk cycle.
+  if(/unreal\s*take|baselayer|^armature\|/i.test(raw)) return "walk";
   const n=cleanClipLabel(raw).toLowerCase();
-  // Death must be tested before hit, because many death clips include "fall".
-  if(/\b(death|dead|die|dying|electrocuted|strangled|fall_forward|fall_backward|fall_down|fall$|shot_in_the_back_and_fall|shot_and_fall|falling_down)\b/i.test(n))return "death";
-  if(/\b(hit|hurt|damage|damaged|knock|knocked|shot|blown|stagger|flinch|impact)\b/i.test(n))return "hit";
-  if(/\b(roar|shout|shouting|scream|angry)\b/i.test(n))return "roar";
-  if(/\b(run|running|runfast|sprint|charge_forward)\b/i.test(n))return "run";
-  if(/\b(walk|walking|limp|limping|unsteady|sneaky|thoughtful|crawl)\b/i.test(n))return "walk";
-  if(/\b(idle|breathe|breathing|look|scan|guard|wait|grab_wall|hover)\b/i.test(n))return "idle";
-  if(/\b(attack|slash|combo|kick|fist|punch|hook|sweep|spin|slam|stomp|throw|cast|spell|skill|thrust|lunge|reap|hammer|axe|sword|shield_push|charged|power)\b/i.test(n))return "attack";
-  // Unknown clips are safer as idle than attack; attacking from a wrong clip feels broken.
+  // Substring matching — cleaned labels are underscore-joined, so \b never matched here
+  // (that was the bug that sent every attack/hit/death to "idle" → atk 0).
+  const has=(...words)=>words.some(w=>n.indexOf(w)>=0);
+  if(has("death","dead","dying","electrocuted","strangled","fall_forward","fall_backward",
+         "fall_down","and_fall","falling","shot_in_the_back"))return "death";
+  if(has("hit","hurt","damage","knock","blown","stagger","flinch","impact"))return "hit";
+  if(has("roar","shout","scream","angry"))return "roar";
+  if(has("run","sprint"))return "run";
+  if(has("walk","limp","unsteady","sneaky","thoughtful","crawl","elderly","walker"))return "walk";
+  if(has("attack","slash","combo","kick","fist","punch","hook","sweep","spin","slam","stomp",
+         "throw","cast","spell","skill","thrust","lunge","reap","hammer","sword","shield_push",
+         "charged","upward","ground","blade","vault","jump","roll","dodge","block","parry"))return "attack";
+  if(has("idle","breathe","breathing","look","scan","guard","wait","grab_wall","hover"))return "idle";
   return "idle";
 }
 function clipCombatMeta(name, role){
@@ -3628,11 +3633,11 @@ function loop(time,xrFrame){
 /* =====================================================================
    10. BOOT SEQUENCE
    ===================================================================== */
-async function boot(demo){
-  log("boot, demo =",demo);G.demo=demo;newSlot();
-  if(demo&&G.lat==null){G.lat=41.3851;G.lon=2.1734;G.heading=0;log("demo origin set");}hide("titleScreen");show("loadScreen");
+async function boot(){
+  log("boot (GPS only)");G.demo=false;newSlot();
+  hide("titleScreen");show("loadScreen");
   let pois=[],env="town";
-  if(!demo){
+  {
     try{
       $("loadingTxt").textContent=(Settings.lang==="es"?"Localizando tu reino… (permite la Ubicación)":"Locating your realm… (allow Location when asked)");
       initHeading();
@@ -3648,8 +3653,13 @@ async function boot(demo){
       G.heatCenter={lat:pos.lat,lon:pos.lon,radius:Settings.poi};
       log("FINAL clusters:",HEAT.clusters.length);
     }catch(e){
-      toast((typeof e==="string"?e:(e&&e.message)||"GPS/POI failed")+" — phantom realm instead",5000);
-      G.demo=true;
+      // No demo/phantom fallback anymore — the game requires a real location.
+      toast((typeof e==="string"?e:(e&&e.message)||"GPS/POI failed")+" — "+(Settings.lang==="es"?"se necesita ubicación para empezar":"a location is needed to start"),6000);
+      hide("loadScreen");
+      if(activeSlot!=null){try{deleteSlot(activeSlot);}catch(_){}activeSlot=null;}
+      G.worldBuilt=false;
+      show("titleScreen");
+      return;
     }
   }
   G.env=env;
@@ -3715,8 +3725,7 @@ function beginGame(){
   $("hud").style.display="block";updBars();
   Dlg.say(G.legend.intro,()=>startTravel());
 }
-$("btnBegin").onclick=()=>{initGL();boot(false);};
-$("btnDemo").onclick=()=>{initGL();boot(true);};
+$("btnBegin").onclick=()=>{initGL();boot();};
 $("btnContinue").onclick=()=>{renderSlots();show("savesScreen");};
 $("btnSavesClose").onclick=()=>hide("savesScreen");
 /* ---- settings UI ---- */
