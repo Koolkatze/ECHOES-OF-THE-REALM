@@ -2226,13 +2226,24 @@ function applyModel(holder,baseScene,key){
     // bones to stay robust across each rig's odd bone bases; skipped if absent.
     try{
       const _inner=(root.userData&&root.userData._inner)||root;
-      let _L=null,_R=null; _inner.traverse(o=>{ if(o.isBone){ if(o.name==='LeftUpLeg')_L=o; else if(o.name==='RightUpLeg')_R=o; } });
+      let _L=null,_R=null,_LF=null,_LT=null,_RF=null,_RT=null;
+      _inner.traverse(o=>{ if(o.isBone){ switch(o.name){
+        case 'LeftUpLeg':_L=o;break; case 'RightUpLeg':_R=o;break;
+        case 'LeftFoot':_LF=o;break; case 'LeftToeBase':_LT=o;break;
+        case 'RightFoot':_RF=o;break; case 'RightToeBase':_RT=o;break; } } });
       if(_L&&_R){
         _inner.updateWorldMatrix(true,true);
-        const _lw=_L.getWorldPosition(new THREE.Vector3()), _rw=_R.getWorldPosition(new THREE.Vector3());
-        _inner.worldToLocal(_lw); _inner.worldToLocal(_rw);
-        holder.userData._face={ wrap:root, inner:_inner, L:_L, R:_R, restAz:Math.atan2(_rw.x-_lw.x, _rw.z-_lw.z) };
-        log('face-lock armed',key);
+        const _loc=(o)=>{ const w=o.getWorldPosition(new THREE.Vector3()); _inner.worldToLocal(w); return w; };
+        const _lp=_loc(_L), _rp=_loc(_R);
+        const restAz=Math.atan2(_rp.x-_lp.x, _rp.z-_lp.z);          // hip-line azimuth (lateral)
+        let fwdOffset=null;                                         // forward = hipLine + fwdOffset
+        if(_LF&&_LT&&_RF&&_RT){                                     // toes sit AHEAD of ankles at rest → true forward
+          const lf=_loc(_LF),lt=_loc(_LT),rf=_loc(_RF),rt=_loc(_RT);
+          const fAz=Math.atan2((lt.x-lf.x)+(rt.x-rf.x),(lt.z-lf.z)+(rt.z-rf.z));
+          fwdOffset=Math.atan2(Math.sin(fAz-restAz),Math.cos(fAz-restAz));
+        }
+        holder.userData._face={ wrap:root, inner:_inner, L:_L, R:_R, restAz, fwdOffset };
+        log('face-lock armed',key,'fwd=',fwdOffset==null?'rest-hold':((fwdOffset*180/Math.PI).toFixed(0)+'\u00b0'));
       }
     }catch(_e){ log('face-cal fail',_e&&_e.message||_e); }
     playRole(holder, set.clips.idle.length?'idle':'walk', {force:true});
@@ -3666,8 +3677,11 @@ function loop(time,xrFrame){
     f.inner.updateWorldMatrix(true,true);
     const lw=f.L.getWorldPosition(_faceV1), rw=f.R.getWorldPosition(_faceV2);
     f.inner.worldToLocal(lw); f.inner.worldToLocal(rw);
-    const curAz=Math.atan2(rw.x-lw.x, rw.z-lw.z);
-    let dy=f.restAz-curAz; dy=Math.atan2(Math.sin(dy),Math.cos(dy));
+    const curAz=Math.atan2(rw.x-lw.x, rw.z-lw.z);          // stable pelvis lateral axis (hip joints)
+    // If we learned the true forward from the feet, aim it at the holder's +Z (which lookAt has
+    // pointed at the camera) so the body FRONT faces you. Otherwise just hold the rest facing.
+    let dy = (f.fwdOffset==null) ? (f.restAz-curAz) : -(curAz+f.fwdOffset);
+    dy=Math.atan2(Math.sin(dy),Math.cos(dy));
     f.wrap.rotation.y=dy;
   }
   for(const e of G.world) faceCorrect(e);
@@ -3892,7 +3906,7 @@ $("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();
 /* surface any load/runtime error so we never get a silent dead UI */
 addEventListener("error",e=>{ try{ log("JS ERROR:", e.message, "@", (e.filename||"").split("/").pop()+":"+e.lineno); }catch(_){}});
 addEventListener("unhandledrejection",e=>{ try{ log("PROMISE REJECT:", (e.reason&&e.reason.message)||e.reason); }catch(_){}});
-log("BUILD READY v=face2m-9 · handlers wired");
+log("BUILD READY v=facefwd-10 · handlers wired");
 </script>
 </body>
 </html>
