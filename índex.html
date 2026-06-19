@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Echoes of the Realm</title>
+<style>
+  :root{\n    --void:#0b0a12; --void2:#15131f;\n    --thunder:#e8b33a; --thunder-hi:#ffe9a8;\n    --arcane:#6e5cc4; --blood:#9c2f2f;\n    --parchment:#cfc2a6; --ink:#1a1410;\n    --hp:#b83232; --mp:#3a6ee8; --st:#3aa860;\n  }\n  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}\n  html,body{width:100%;height:100%;overflow:hidden;background:var(--void);color:var(--parchment);\n    font-family:Georgia,'Times New Roman',serif}\n  #c{position:fixed;inset:0;display:block}\n  .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:auto;\n    background:radial-gradient(ellipse at 50% 30%,#1c1830 0%,var(--void) 70%);z-index:50;padding:24px}\n  .screen.hidden{display:none!important}\n  \n  h1,h2,h3{font-family:serif;letter-spacing:1px;text-align:center;color:var(--thunder);text-shadow:0 2px 4px rgba(0,0,0,0.8)}\n  h1{font-size:2rem;margin-bottom:8px}\n  p{font-size:0.95rem;line-height:1.4;color:#a39baf;text-align:center;max-width:320px;margin-bottom:16px}\n  \n  .btn{background:linear-gradient(to bottom,#2c234d,#1b1433);border:1px solid var(--arcane);\n    color:var(--parchment);padding:12px 24px;font-size:1rem;font-family:serif;cursor:pointer;\n    border-radius:4px;box-shadow:0 4px 8px rgba(0,0,0,0.5);transition:all 0.15s ease;text-shadow:0 1px 2px #000;\n    display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:160px;user-select:none}\n  .btn:active{transform:scale(0.97);background:var(--arcane);border-color:var(--thunder-hi)}\n  .btn.secondary{background:linear-gradient(to bottom,#2b2420,#1a1411);border-color:#5c4d43;color:#bdae93}\n  \n  #loadingScreen{z-index:100;background:var(--void)}\n  .spinner{width:40px;height:40px;border:3px solid rgba(110,92,196,0.2);border-top-color:var(--thunder);\n    border-radius:50%;animation:spin 1s linear infinite;margin-bottom:16px}\n  @keyframes spin{to{transform:rotate(360deg)}}\n  \n  #hud{position:fixed;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:between;\n    padding:12px;z-index:10;font-family:monospace;font-size:0.75rem;color:#bdae93}\n  .hud-top{display:flex;justify-content:space-between;width:100%}\n  .v-bars{display:flex;flex-direction:column;gap:4px;pointer-events:auto}\n  .v-bar-row{display:flex;align-items:center;gap:6px}\n  .v-lbl{width:18px;font-weight:bold;color:var(--thunder);text-align:right;font-size:0.7rem}\n  .v-bar-bg{width:100px;height:10px;background:rgba(0,0,0,0.6);border:1px solid #443c52;border-radius:2px;overflow:hidden;position:relative}\n  .v-bar-fill{height:100%;width:100%;transition:width 0.2s ease;box-shadow:inset 0 1px 2px rgba(255,255,255,0.2)}\n  .v-bar-fill.hp{background:var(--hp)}.v-bar-fill.mp{background:var(--mp)}.v-bar-fill.st{background:var(--st)}\n  \n  .v-stats{text-align:right;background:rgba(15,13,22,0.7);padding:6px 10px;border-radius:4px;\n    border:1px solid rgba(110,92,196,0.2);backdrop-filter:blur(2px);pointer-events:auto;\n    display:flex;flex-direction:column;align-items:flex-end;gap:2px}\n  .gold-count{color:var(--thunder);font-weight:bold;display:flex;align-items:center;gap:4px}\n  \n  .hud-bottom{margin-top:auto;display:flex;flex-direction:column;align-items:center;width:100%;gap:12px}\n  #combatLog{background:linear-gradient(to top,rgba(11,10,18,0.85),rgba(11,10,18,0.4));\n    border-radius:4px;padding:6px 12px;width:100%;max-width:360px;max-height:64px;overflow-y:hidden;\n    display:flex;flex-direction:column;gap:2px;pointer-events:none;text-align:center;\n    text-shadow:0 1px 2px #000;color:#c5bad1}\n  .log-line{animation:fadeIn 0.2s ease forwards}\n  @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}\n  \n  .action-row{display:flex;justify-content:center;gap:12px;width:100%;pointer-events:auto}\n  .btn-action{width:56px;height:56px;min-width:56px;padding:0;border-radius:50%;background:linear-gradient(135deg,#322859,#17122b);\n    border:2px solid var(--arcane);box-shadow:0 4px 10px rgba(0,0,0,0.6);color:var(--parchment);font-size:1.2rem}\n  .btn-action:active{transform:scale(0.92);background:var(--arcane)}\n  .btn-action.btn-main{width:68px;height:68px;min-width:68px;margin-top:-6px;border-color:var(--thunder);\n    background:linear-gradient(135deg,#7d2828,#3d1010);font-size:1.5rem;border-width:3px}\n  .btn-action.btn-main:active{background:var(--blood);border-color:var(--thunder-hi)}\n  .btn-action.on{background:var(--thunder);color:var(--void);border-color:var(--thunder-hi);\n    box-shadow:0 0 12px var(--thunder)}\n    \n  #toast{position:fixed;top:20%;left:50%;transform:translate(-50%,-50%);background:rgba(26,20,16,0.95);\n    border:1px solid var(--thunder);padding:10px 20px;border-radius:4px;color:var(--parchment);\n    font-size:0.9rem;z-index:90;pointer-events:none;box-shadow:0 4px 15px rgba(0,0,0,0.8);\n    transition:opacity 0.25s ease,transform 0.25s ease;opacity:0;text-align:center;max-width:280px}\n  #toast.on{opacity:1;transform:translate(-50%,-40%)}\n  \n  #veilTint{position:fixed;inset:0;background:rgba(110,92,196,0.15);mix-blend-mode:color-burn;\n    pointer-events:none;z-index:5;opacity:0;transition:opacity 0.3s ease}\n  #veilTint.on{opacity:1}\n  \n  #debugLog{position:fixed;bottom:80px;left:12px;max-width:200px;max-height:120px;overflow:hidden;\n    font-family:monospace;font-size:0.6rem;color:rgba(207,194,166,0.4);pointer-events:none;\n    display:flex;flex-direction:column-reverse;gap:1px;z-index:2}\n    \n  .quest-card{background:rgba(21,19,31,0.9);border:1px solid var(--thunder);border-radius:6px;\n    padding:16px;max-width:300px;width:100%;margin-bottom:20px;box-shadow:0 8px 24px rgba(0,0,0,0.7);\n    display:flex;flex-direction:column;gap:10px}\n  .quest-title{font-size:1.1rem;color:var(--thunder);font-weight:bold;text-align:center}\n  .quest-desc{font-size:0.85rem;color:#988fa6;line-height:1.3;text-align:left}\n  .quest-meta{display:flex;justify-content:space-between;font-size:0.75rem;border-top:1px solid rgba(110,92,196,0.2);\n    padding-top:8px;color:var(--parchment);font-family:monospace}\n    \n  #reticle{position:fixed;top:50%;left:50%;width:10px;height:10px;border:2px solid var(--thunder);\n    border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:8;\n    opacity:0.6;display:none}\n  #reticle.active{display:block}\n</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+<div id="reticle"></div>
+<div id="veilTint"></div>
+
+<div id="loadingScreen" class="screen">
+  <div class="spinner"></div>
+  <h2 id="loadingText">Attuning to the Leylines...</h2>
+  <p id="loadingSub" style="margin-top:8px;font-size:0.75rem;font-family:monospace;color:rgba(207,194,166,0.5)"></p>
+</div>
+
+<div id="menuScreen" class="screen hidden">
+  <h1>Echoes of the Realm</h1>
+  <p>An Augmented Reality RPG. Step into the unseen world, gather ancient essences, and banish wandering anomalies.</p>
+  
+  <div class="quest-card">
+    <div class="quest-title" id="qTitle">The Fractured Gate</div>
+    <div class="quest-desc" id="qDesc">Essence rifts have torn open nearby. Anomalies are crossing over into your coordinates. Secure the crystals and purify the zone.</div>
+    <div class="quest-meta">
+      <span id="qDanger">Danger: Low</span>
+      <span id="qReward">Reward: 150g</span>
+    </div>
+  </div>
+  
+  <button class="btn" id="btnEnterAR">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22" x2="12" y2="12"></line></svg>
+    Enter AR Realm
+  </button>
+  <button class="btn secondary" id="btnEnterFlat" style="margin-top:10px">
+    Play in Flat Mode
+  </button>
+</div>
+
+<div id="endScreen" class="screen hidden">
+  <h1 id="endTitle">Quest Concluded</h1>
+  <p id="endDesc">You have faded back into the safety of the baseline reality.</p>
+  <button class="btn" id="btnNewQuest">Accept New Contract</button>
+</div>
+
+<div id="hud" class="hidden">
+  <div class="hud-top">
+    <div class="v-bars">
+      <div class="v-bar-row">
+        <span class="v-lbl">HP</span>
+        <div class="v-bar-bg"><div id="barHP" class="v-bar-fill hp"></div></div>
+      </div>
+      <div class="v-bar-row">
+        <span class="v-lbl">MP</span>
+        <div class="v-bar-bg"><div id="barMP" class="v-bar-fill mp"></div></div>
+      </div>
+      <div class="v-bar-row">
+        <span class="v-lbl">ST</span>
+        <div class="v-bar-bg"><div id="barST" class="v-bar-fill st"></div></div>
+      </div>
+    </div>
+    
+    <div class="v-stats">
+      <div class="gold-count">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        <span id="txtGold">0</span>g
+      </div>
+      <div style="font-size:0.65rem;color:rgba(207,194,166,0.6);margin-top:2px;" id="txtQuestProgress">Crystals: 0/3</div>
+    </div>
+  </div>
+  
+  <div id="debugLog"></div>
+  
+  <div class="hud-bottom">
+    <div id="combatLog">
+      <div class="log-line">The veil fluctuates. Stay alert.</div>
+    </div>
+    
+    <div class="action-row">
+      <button class="btn-action" id="btnSpell" title="Cast Arcane Bolt (Cost: 15 MP)">
+        ⚡
+      </button>
+      
+      <button class="btn-action btn-main" id="btnAttack" title="Strike Enemy">
+        ⚔️
+      </button>
+      
+      <button class="btn-action" id="btnVeil" title="Hold to Phase Veil (Invisibility, drains Stamina)">
+        👁️
+      </button>
+      
+      <button class="btn-action" id="btnWalk" style="background:linear-gradient(135deg,#2e4536,#111f16);border-color:#3aa860" title="Step Forward (Flat mode)">
+        👣
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Global Configuration & State Engine */
+const VERSION = "1.0.4-pivoted";
+const LANG = "en";
+
+const GLB_PATHS = {
+  goblin: "https://vazgriz.github.io/glTF-Sample-Models/2.0/Monster/glTF-Binary/Monster.glb", // Placeholder animated
+  orc: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/AnimatedMorphCube/glTF-Binary/AnimatedMorphCube.glb",
+  skeleton: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMan/glTF-Binary/CesiumMan.glb",
+  player_weapon: "" 
+};
+
+// Localizations
+const DICTIONARY = {
+  en: {
+    loading_assets: "Loading realm entities...",
+    init_failed: "Leyline alignment failed. WebGL/XR issue suspected.",
+    quest_won: "Purification Complete!",
+    quest_lost: "You Have Faded",
+    victory_desc: "The anomalies have been dissolved. The sector is clear. Collect your bounty.",
+    defeat_desc: "Your corporeal anchor broke. Returning to safety to regenerate.",
+    log_spawn: "An anomaly has materialised nearby!",
+    log_hit_enemy: "You strike the anomaly for %d damage!",
+    log_hit_player: "Anomaly strikes you for %d damage!",
+    log_kill: "Anomaly banished! Collected %dg.",
+    log_crystal: "Purified an essence crystal! (+20 MP)",
+    log_spell: "Cast Arcane Bolt! Inflicted %d magic damage.",
+    log_no_mp: "Insufficient Mana!",
+    log_no_st: "Exhausted! Cannot maintain phase veil.",
+    veil_on: "Phasing into the void... (Invisible)",
+    veil_off: "Returned to the physical plane."
+  }
+};
+
+function t(key, ...args) {
+  let str = DICTIONARY[LANG][key] || key;
+  args.forEach(arg => str = str.replace("%d", arg));
+  return str;
+}
+
+const $ = id => document.getElementById(id);
+
+function log(...m) {
+  const s = m.join(" ");
+  console.log("[GAME]", s);
+  const d = $("debugLog");
+  if (d) {
+    const el = document.createElement("div");
+    el.innerText = s;
+    d.insertBefore(el, d.firstChild);
+    if (d.children.length > 5) d.removeChild(d.lastChild);
+  }
+}
+
+// Global Core Object Engine
+const G = {
+  xr: false,
+  renderer: null,
+  scene: null,
+  camera: null,
+  pmremGenerator: null,
+  mixers: [],
+  clock: new THREE.Clock(),
+  loadingModelsCount: 0,
+  modelCache: {},
+  
+  // Game Logic State variables
+  gameActive: false,
+  encounterActive: false,
+  tracking: false,
+  
+  // Player metrics
+  hp: 100, maxHP: 100,
+  mp: 40, maxMP: 60,
+  st: 80, maxST: 80,
+  gold: 0,
+  crystalsCollected: 0,
+  crystalsTotal: 3,
+  invisible: false,
+  
+  // Positional systems
+  camPos: new THREE.Vector3(0, 0, 0),
+  gpsCoords: [],
+  
+  // Entities lists
+  enemies: [],
+  crystals: [],
+  scenery: []
+};
+
+// Tuning Settings
+const HARD_MIN = 1.2; 
+const SPAWN_RADIUS = 15;
+
+/* Document Event Setup */
+window.addEventListener("DOMContentLoaded", init);
+
+async function init() {
+  log("Initializing Echoes of the Realm engine v" + VERSION);
+  
+  setupUIHandlers();
+  
+  try {
+    setupThreeEngine();
+    buildProceduralEnvironment();
+    preloadRequiredModels();
+  } catch(e) {
+    log("CRITICAL INIT ERROR:", e.message);
+    $("loadingText").innerText = t("init_failed");
+    $("loadingSub").innerText = e.stack || "";
+    return;
+  }
+  
+  // Graceful entry out of loading screen once setup is finalized
+  checkPreloadStatus();
+}
+
+function setupThreeEngine() {
+  const canvas = $("c");
+  G.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "high-performance" });
+  G.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  G.renderer.setSize(window.innerWidth, window.innerHeight);
+  G.renderer.xr.enabled = true;
+  G.renderer.outputEncoding = THREE.sRGBEncoding;
+  G.renderer.shadowMap.enabled = true;
+
+  G.scene = new THREE.Scene();
+  
+  // Setup lighting environment
+  const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+  G.scene.add(ambient);
+  
+  const sun = new THREE.DirectionalLight(0xffe1a8, 0.8);
+  sun.position.set(5, 12, 4);
+  sun.castShadow = true;
+  G.scene.add(sun);
+  
+  G.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 100);
+  G.scene.add(G.camera);
+  
+  // Handle layout shifts
+  window.addEventListener("resize", onWindowResize);
+}
+
+function onWindowResize() {
+  G.camera.aspect = window.innerWidth / window.innerHeight;
+  G.camera.updateProjectionMatrix();
+  G.renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function setupUIHandlers() {
+  $("btnEnterAR").onclick = () => launchGame(true);
+  $("btnEnterFlat").onclick = () => launchGame(false);
+  
+  // Hook main action panel mechanics
+  $("btnAttack").onclick = (e) => { e.preventDefault(); playerAttack(); };
+  $("btnSpell").onclick = (e) => { e.preventDefault(); playerCastSpell(); };
+  
+  // Setup continuous walk processing
+  let _walkHold = null;
+  const _wb = $("btnWalk");
+  _wb.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    walkStep();
+    _walkHold = setInterval(walkStep, 420);
+  });
+  const stopWalk = () => { if(_walkHold) { clearInterval(_walkHold); _walkHold = null; } };
+  _wb.addEventListener("pointerup", stopWalk);
+  _wb.addEventListener("pointerleave", stopWalk);
+  addEventListener("pointerup", stopWalk);
+  
+  $("btnNewQuest").onclick = () => location.reload();
+  $("c").addEventListener("click", () => { if(G.encounterActive && !G.xr) playerAttack(); });
+  
+  // Graceful runtime logging of errors
+  addEventListener("error", e => {
+    try { log("JS ERROR:", e.message, "@", (e.filename || "").split("/").pop(), ":", e.lineno); } catch(ex) {}
+  });
+}
+
+/* Entity & Model Loading Core Systems */
+function preloadRequiredModels() {
+  // Spawn hooks to guarantee pipeline population
+  Object.keys(GLB_PATHS).forEach(k => {
+    if (GLB_PATHS[k]) {
+      preloadGLB(k);
+    }
+  });
+}
+
+function preloadGLB(key) {
+  const p = GLB_PATHS[key];
+  if (!p) return;
+  
+  G.loadingModelsCount++;
+  updateLoadingScreen();
+  
+  const loader = new THREE.GLTFLoader();
+  loader.load(p, (gltf) => {
+    G.loadingModelsCount--;
+    
+    // Store complete scene and clips cleanly inside cache reference map
+    G.modelCache[key] = {
+      scene: gltf.scene,
+      animations: gltf.animations
+    };
+    
+    log("GLB asset optimized & cached successfully:", key);
+    checkPreloadStatus();
+  }, undefined, (err) => {
+    G.loadingModelsCount--;
+    log("GLB LOAD ERROR for key:", key, err.message);
+    checkPreloadStatus();
+  });
+}
+
+function updateLoadingScreen() {
+  $("loadingSub").innerText = `Assembling leylines (${G.loadingModelsCount} files remaining)...`;
+}
+
+function checkPreloadStatus() {
+  if (G.loadingModelsCount <= 0) {
+    $("loadingScreen").classList.add("hidden");
+    $("menuScreen").classList.remove("hidden");
+    log("System baseline stabilized. Main menu active.");
+  }
+}
+
+function applyModel(e, key) {
+  const u = e.userData; if (!u) return;
+  
+  // Purge internal procedural structure placeholder lines completely
+  while (e.children.length > 0) {
+    e.remove(e.children[0]);
+  }
+  u.modelKey = key;
+  
+  // Fallback map layout configurations
+  if (key === 'crystal_red' || key === 'crystal_blue' || key === 'crystal_green' || key === 'totem' || key === 'chest') {
+    buildProceduralMesh(e, key);
+    return;
+  }
+  
+  const cache = G.modelCache[key];
+  if (cache) {
+    setupClonedModel(e, cache, key);
+    return;
+  }
+  
+  // Async catch-all loader pipeline handling if called out of loop order
+  const p = GLB_PATHS[key];
+  if (!p) return;
+  
+  G.loadingModelsCount++;
+  const loader = new THREE.GLTFLoader();
+  loader.load(p, (gltf) => {
+    G.loadingModelsCount--;
+    
+    G.modelCache[key] = {
+      scene: gltf.scene,
+      animations: gltf.animations
+    };
+    setupClonedModel(e, G.modelCache[key], key);
+  }, undefined, (err) => {
+    G.loadingModelsCount--;
+    log("Late-bind GLB asset pipeline load error:", key);
+  });
+}
+
+function setupClonedModel(e, cache, key) {
+  const cl = cache.scene.clone();
+  
+  // FIX: Create an intermediate wrapper group to handle the 180-degree flip.
+  // This isolates the rotation from the AnimationMixer so animations don't overwrite it!
+  const pivot = new THREE.Group();
+  pivot.name = "rotation_pivot";
+  pivot.rotation.y = Math.PI; // Perfectly turns the model's native +Z forward face to point forward
+  pivot.add(cl);
+  
+  e.add(pivot);
+  
+  // Rig scale rules dynamically depending on entity type
+  if (key === 'goblin') pivot.scale.set(0.012, 0.012, 0.012);
+  else pivot.scale.set(0.8, 0.8, 0.8);
+  
+  // Bind animation tracks directly inside the cloned root structure
+  if (cache.animations && cache.animations.length > 0) {
+    const mixer = new THREE.AnimationMixer(cl);
+    const clip = cache.animations[0];
+    const action = mixer.clipAction(clip);
+    action.play();
+    G.mixers.push(mixer);
+    e.userData.mixer = mixer;
+  }
+}
+
+/* Procedural Primitive Generation Systems (Fallback/Scenery) */
+function buildProceduralMesh(e, key) {
+  let geo, mat;
+  
+  if (key.startsWith('crystal_')) {
+    geo = new THREE.OctahedronGeometry(0.3, 0);
+    let color = 0xcc3333;
+    if (key.endsWith('blue')) color = 0x3366ff;
+    if (key.endsWith('green')) color = 0x33cc66;
+    mat = new THREE.MeshStandardMaterial({ color, roughness: 0.1, metalness: 0.9, emissive: color, emissiveIntensity: 0.3 });
+  } else if (key === 'chest') {
+    geo = new THREE.BoxGeometry(0.5, 0.4, 0.4);
+    mat = new THREE.MeshStandardMaterial({ color: 0x5a3d28, roughness: 0.7 });
+  } else {
+    geo = new THREE.CylinderGeometry(0.1, 0.2, 0.8, 6);
+    mat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.8 });
+  }
+  
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = true;
+  m.position.y = 0.2;
+  e.add(m);
+}
+
+function buildProceduralEnvironment() {
+  // Construct grid backing structure for Flat mode navigation context
+  const grid = new THREE.GridHelper(60, 60, 0x443c52, 0x1f1a2b);
+  grid.position.y = -0.01;
+  G.scene.add(grid);
+  
+  const floorGeo = new THREE.PlaneGeometry(100, 100);
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x0b0a12, roughness: 0.9, metalness: 0.1 });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI/2;
+  floor.receiveShadow = true;
+  G.scene.add(floor);
+}
+
+/* Core Gameplay Launch Control Systems */
+function launchGame(requestAR) {
+  $("menuScreen").classList.add("hidden");
+  $("hud").classList.remove("hidden");
+  
+  G.gameActive = true;
+  G.encounterActive = true;
+  
+  if (requestAR && navigator.xr) {
+    navigator.xr.isSessionSupported("immersive-ar").then(supported => {
+      if (supported) {
+        G.renderer.xr.setSessionObj = null; 
+        G.renderer.xr.startSessionIfPossible = null; 
+        
+        navigator.xr.requestSession("immersive-ar", {
+          requiredFeatures: ["local-floor"],
+          optionalFeatures: ["dom-overlay"],
+          domOverlay: { root: document.body }
+        }).then(session => {
+          G.xr = true;
+          G.tracking = true;
+          $("reticle").classList.add("active");
+          $("btnWalk").style.display = "none"; // Hide redundant controls inside active XR
+          G.renderer.xr.setSession(session);
+          log("AR Immersive Leyline active.");
+          runMainLoop();
+        }).catch(err => {
+          log("AR Session request failed. Reverting to Flat mode navigation:", err.message);
+          fallbackToFlatMode();
+        });
+      } else {
+        fallbackToFlatMode();
+      }
+    });
+  } else {
+    fallbackToFlatMode();
+  }
+}
+
+function fallbackToFlatMode() {
+  G.xr = false;
+  G.tracking = false;
+  G.camera.position.set(0, 1.6, 5); // Anchor baseline mock heights
+  $("btnWalk").style.display = "inline-flex";
+  log("Flat mode pipeline fallback engaged.");
+  runMainLoop();
+}
+
+function runMainLoop() {
+  G.renderer.setAnimationLoop(tick);
+}
+
+/* Engine Simulation Step Updates */
+function tick() {
+  const dt = Math.min(G.clock.getDelta(), 0.1);
+  
+  // Track system time delta updates
+  G.mixers.forEach(m => m.update(dt));
+  
+  if (G.gameActive) {
+    updatePlayerRegen(dt);
+    updateWorld(dt);
+  }
+  
+  // Synchronize structural orientation matrix changes
+  if (!G.xr) {
+    G.camPos.copy(G.camera.position);
+  } else {
+    G.camera.getWorldPosition(G.camPos);
+  }
+  
+  G.renderer.render(G.scene, G.camera);
+}
+
+function updatePlayerRegen(dt) {
+  // Manage Phase Veil metrics and resource drainage loops
+  if (G.invisible) {
+    G.st = Math.max(0, G.st - 15 * dt);
+    if (G.st <= 0) {
+      endVeil();
+      addLogLine(t("log_no_st"));
+    }
+  } else {
+    G.st = Math.min(G.maxST, G.st + 5 * dt);
+  }
+  
+  // Passive mana channels
+  G.mp = Math.min(G.maxMP, G.mp + 1.5 * dt);
+  updateHUD();
+}
+
+function updateWorld(dt) {
+  if (!G.gameActive) return;
+  
+  const cpx = G.camPos.x, cpz = G.camPos.z;
+  
+  // Dynamic spawning mechanics if population checks crash low limits
+  if (G.enemies.length === 0 && G.crystals.length === 0) {
+    generateSectorEntities();
+  }
+  
+  // Process crystal proximity triggers
+  for (let i = G.crystals.length - 1; i >= 0; i--) {
+    const c = G.crystals[i];
+    const dx = c.position.x - cpx, dz = c.position.z - cpz;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    
+    // Rotate items softly in place
+    c.rotation.y += 1.2 * dt;
+    
+    if (dist < 1.0) {
+      G.crystalsCollected++;
+      G.mp = Math.min(G.maxMP, G.mp + 20);
+      addLogLine(t("log_crystal"));
+      G.scene.remove(c);
+      G.crystals.splice(i, 1);
+      
+      checkQuestConditions();
+    }
+  }
+  
+  // Process enemy behaviors and approach sequences
+  G.enemies.forEach(e => {
+    const u = e.userData; if (!u) return;
+    
+    const dx = e.position.x - cpx, dz = e.position.z - cpz;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    
+    // FIX: Reverted to standard lookAt behavior. 
+    // The 180-degree correction is now handled completely safely by the Pivot inside setupClonedModel!
+    e.lookAt(cpx, e.position.y, cpz);
+    
+    const moving = u.state === "active" && dist > HARD_MIN;
+    if (moving && !G.invisible) {
+      // Move closer along forward tracking vector lines
+      const speed = u.type === 'goblin' ? 1.4 : 0.8;
+      e.position.x -= (dx / dist) * speed * dt;
+      e.position.z -= (dz / dist) * speed * dt;
+    }
+    
+    // Attack processing thresholds
+    if (dist <= HARD_MIN + 0.2 && !G.invisible) {
+      u.attackTimer = (u.attackTimer || 0) + dt;
+      if (u.attackTimer >= 2.0) {
+        u.attackTimer = 0;
+        executeEnemyStrike(e);
+      }
+    } else {
+      u.attackTimer = 0;
+    }
+  });
+}
+
+/* Strategic Sector Map Entity Population Generation */
+function generateSectorEntities() {
+  log("Refreshing sector layout parameters...");
+  
+  // Populate essence shard elements
+  for (let i = 0; i < G.crystalsTotal; i++) {
+    const group = new THREE.Group();
+    const angle = (i / G.crystalsTotal) * Math.PI * 2 + Math.random() * 0.5;
+    const r = 4 + Math.random() * 5;
+    
+    group.position.set(Math.cos(angle) * r, 0, Math.sin(angle) * r);
+    group.userData = { isCrystal: true };
+    
+    const keys = ['crystal_red', 'crystal_blue', 'crystal_green'];
+    applyModel(group, keys[i % keys.length]);
+    G.scene.add(group);
+    G.crystals.push(group);
+  }
+  
+  // Spawn roaming adversaries
+  const enemyTypes = ['goblin', 'orc', 'skeleton'];
+  for (let i = 0; i < 2; i++) {
+    const group = new THREE.Group();
+    const angle = Math.random() * Math.PI * 2;
+    const r = 8 + Math.random() * 6;
+    
+    group.position.set(Math.cos(angle) * r, 0, Math.sin(angle) * r);
+    group.userData = {
+      state: "active",
+      type: enemyTypes[Math.floor(Math.random() * enemyTypes.length)],
+      hp: 30 + i * 20,
+      maxHP: 30 + i * 20,
+      attackPower: 8 + i * 4
+    };
+    
+    applyModel(group, group.userData.type);
+    G.scene.add(group);
+    G.enemies.push(group);
+    
+    addLogLine(t("log_spawn"));
+  }
+}
+
+/* Player Tactical Input Handling Action Execution functions */
+function walkStep() {
+  if (!G.gameActive || G.xr) return;
+  
+  // Calculate movement steps forward based on flat viewpoint projections
+  const dir = new THREE.Vector3();
+  G.camera.getWorldDirection(dir);
+  dir.y = 0; 
+  dir.normalize();
+  
+  G.camera.position.addScaledVector(dir, 0.4);
+}
+
+function playerAttack() {
+  if (!G.gameActive) return;
+  
+  // Find the closest valid targets within visual range limits
+  let closest = null, minDist = 3.5;
+  
+  G.enemies.forEach(e => {
+    const dx = e.position.x - G.camPos.x, dz = e.position.z - G.camPos.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < minDist) {
+      minDist = dist;
+      closest = e;
+    }
+  });
+  
+  if (closest) {
+    const dmg = 12;
+    closest.userData.hp -= dmg;
+    addLogLine(t("log_hit_enemy", dmg));
+    
+    // Play combat feedback scale bounce visual cues
+    closest.scale.set(1.2, 0.8, 1.2);
+    setTimeout(() => { closest.scale.set(1,1,1); }, 150);
+    
+    if (closest.userData.hp <= 0) {
+      banishEnemy(closest);
+    }
+  } else {
+    toast("No entities within weapon reach.", 800);
+  }
+}
+
+function playerCastSpell() {
+  if (!G.gameActive) return;
+  
+  if (G.mp < 15) {
+    addLogLine(t("log_no_mp"));
+    toast(t("log_no_mp"), 900);
+    return;
+  }
+  
+  let target = null, minDist = 8.0;
+  G.enemies.forEach(e => {
+    const dx = e.position.x - G.camPos.x, dz = e.position.z - G.camPos.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist < minDist) { minDist = dist; target = e; }
+  });
+  
+  if (target) {
+    G.mp -= 15;
+    const dmg = 25;
+    target.userData.hp -= dmg;
+    addLogLine(t("log_spell", dmg));
+    
+    if (target.userData.hp <= 0) {
+      banishEnemy(target);
+    }
+    updateHUD();
+  } else {
+    toast("No clear target found for spell lock.", 800);
+  }
+}
+
+// Invisibility phase management logic blocks
+function startVeil() {
+  if (G.st < 20 || G.invisible) return;
+  G.invisible = true;
+  $("btnVeil").classList.add("on");
+  $("veilTint").classList.add("on");
+  toast(t("veil_on"), 1200);
+}
+
+function endVeil() {
+  if (!G.invisible) return;
+  G.invisible = false;
+  $("btnVeil").classList.remove("on");
+  $("veilTint").classList.remove("on");
+  toast(t("veil_off"), 900);
+}
+
+// Attach stealth UI interaction systems safely
+const _vb = $("btnVeil");
+if (_vb) {
+  _vb.addEventListener("pointerdown", e => { e.preventDefault(); startVeil(); });
+  _vb.addEventListener("pointerup", e => { e.preventDefault(); endVeil(); });
+  _vb.addEventListener("pointerleave", endVeil);
+  _vb.addEventListener("pointercancel", endVeil);
+  addEventListener("pointerup", () => { if (G.invisible) endVeil(); });
+}
+
+/* NPC Combat Resolution Routines */
+function executeEnemyStrike(e) {
+  if (G.invisible || !G.gameActive) return;
+  
+  const dmg = e.userData.attackPower || 10;
+  G.hp = Math.max(0, G.hp - dmg);
+  addLogLine(t("log_hit_player", dmg));
+  updateHUD();
+  
+  if (G.hp <= 0) {
+    concludeQuest(false);
+  }
+}
+
+function banishEnemy(e) {
+  const index = G.enemies.indexOf(e);
+  if (index >= 0) {
+    G.enemies.splice(index, 1);
+  }
+  G.scene.remove(e);
+  
+  const bounty = 40;
+  G.gold += bounty;
+  addLogLine(t("log_kill", bounty));
+  updateHUD();
+  
+  checkQuestConditions();
+}
+
+/* UI Panel Update Synchronizer Hooks */
+function updateHUD() {
+  $("barHP").style.width = `${(G.hp / G.maxHP) * 100}%`;
+  $("barMP").style.width = `${(G.mp / G.maxMP) * 100}%`;
+  $("barST").style.width = `${(G.st / G.maxST) * 100}%`;
+  $("txtGold").innerText = G.gold;
+  $("txtQuestProgress").innerText = `Crystals: ${G.crystalsCollected}/${G.crystalsTotal}`;
+}
+
+function addLogLine(text) {
+  const container = $("combatLog");
+  if (!container) return;
+  
+  const el = document.createElement("div");
+  el.className = "log-line";
+  el.innerText = text;
+  
+  container.appendChild(el);
+  container.scrollTop = container.scrollHeight;
+  if (container.children.length > 3) container.removeChild(container.firstChild);
+}
+
+function toast(msg, duration = 1000) {
+  const el = $("toast") || createToastElement();
+  el.innerText = msg;
+  el.classList.add("on");
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => el.classList.remove("on"), duration);
+}
+
+function createToastElement() {
+  const el = document.createElement("div");
+  el.id = "toast";
+  document.body.appendChild(el);
+  return el;
+}
+
+/* State Validation and Ending Phase Rules */
+function checkQuestConditions() {
+  if (G.crystalsCollected >= G.crystalsTotal && G.enemies.length === 0) {
+    concludeQuest(true);
+  }
+}
+
+function concludeQuest(isVictory) {
+  G.gameActive = false;
+  $("hud").classList.add("hidden");
+  $("endScreen").classList.remove("hidden");
+  
+  if (isVictory) {
+    $("endTitle").innerText = t("quest_won");
+    $("endTitle").style.color = "var(--thunder)";
+    $("endDesc").innerText = t("victory_desc");
+  } else {
+    $("endTitle").innerText = t("quest_lost");
+    $("endTitle").style.color = "var(--blood)";
+    $("endDesc").innerText = t("defeat_desc");
+  }
+}
+</script>
+</body>
+</html>
