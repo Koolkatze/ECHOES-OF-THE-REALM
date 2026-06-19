@@ -981,8 +981,8 @@ function buildClusters(){
   for(let r=0;r<HEAT.rows;r++)for(let c=0;c<HEAT.cols;c++){
     const cell=HEAT.grid[r][c];
     if(cell.heat<0.05)continue; // skip only truly empty
-    // enemy count scales with heat: green ~3, yellow ~6, red ~10
-    const n=Math.max(3,Math.round(3+cell.heat*8));
+    // enemy count scales with heat: green ~6, yellow ~13, red ~21 (denser zones)
+    const n=Math.max(5,Math.round(5+cell.heat*16));
     const [lat,lon]=cellCenterLatLon(r,c);
     const env=MICRO_TO_ENV[cell.biome]||"town";
     HEAT.clusters.push({lat,lon,baseCount:n,count:n,heat:cell.heat,biome:cell.biome,env,cleared:false,clearedAt:0});
@@ -1242,8 +1242,8 @@ function dangerCount(cl){
   // every 2 total stat-levels adds ~12% more foes; capped per heat tier.
   const lvl=totalLevels();
   const scale=1+Math.min(lvl,20)*0.06;                  // up to +120% at level 20
-  const tierCap=cl.heat>=.66?18:cl.heat>=.33?12:7;      // red/yellow/green ceilings
-  return clamp(Math.round(cl.baseCount*scale),3,tierCap);
+  const tierCap=cl.heat>=.66?40:cl.heat>=.33?24:12;     // red/yellow/green ceilings (denser)
+  return clamp(Math.round(cl.baseCount*scale),5,tierCap);
 }
 const RESPAWN_MS=5*60*1000;   // a cleared pack returns after 5 minutes…
 const RESPAWN_DIST=120;       // …but only if you have moved away from it
@@ -1295,7 +1295,7 @@ function liveSpawnNearby(){
   for(const e of G.world){ const u=e.userData; if(!u||u.boss||u.dead)continue;
     const dd=Math.hypot((u.lat-G.lat)*mlat,(u.lon-G.lon)*mlon);
     if(dd>=SAFE_SPAWN_MIN*0.55 && dd<VISIBLE_R)nearby++; }
-  const want = heat>=0.66?5 : heat>=0.33?3 : 1;
+  const want = heat>=0.66?10 : heat>=0.33?6 : 3;
   if(G._dbgOn) log("live-check: nearby=",nearby,"want=",want,"heat=",heat.toFixed(2),"cell=",!!cell,"nearestCl=",bd<9999?bd.toFixed(0)+"m":"none");
   if(nearby>=want)return;
   const env=MICRO_TO_ENV[biome]||G.env||"town";
@@ -2401,7 +2401,7 @@ const BOSS_MIN_DIST=4.0; // bosses keep a slightly wider ring so large models st
 const SAFE_SPAWN_MIN=34; // no newly created foe may be closer than this to the player
 const SAFE_SPAWN_MAX=58; // live spawns appear near the edge of visibility, then walk in
 const SPAWN_GRACE_MS=6500; // visible-but-not-hostile grace after spawning/entering AR
-const LIVE_MIN_HEAT=0.12; // below this, do not fabricate nearby enemies
+const LIVE_MIN_HEAT=0.05; // below this, no nearby spawns (matches cluster floor; faint-green now spawns)
 G.invisible=false;      // Veil spell active → enemies cannot see you
 function offsetLatLon(lat,lon,dN,dE){const {mlat,mlon}=metersPerDeg(lat);
   return [lat+dN/mlat, lon+dE/mlon];}
@@ -3906,7 +3906,7 @@ $("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();
 /* surface any load/runtime error so we never get a silent dead UI */
 addEventListener("error",e=>{ try{ log("JS ERROR:", e.message, "@", (e.filename||"").split("/").pop()+":"+e.lineno); }catch(_){}});
 addEventListener("unhandledrejection",e=>{ try{ log("PROMISE REJECT:", (e.reason&&e.reason.message)||e.reason); }catch(_){}});
-log("BUILD READY v=facefwd-10 · handlers wired");
+log("BUILD READY v=density-11 · handlers wired");
 </script>
 </body>
 </html>
