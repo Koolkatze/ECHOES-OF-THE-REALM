@@ -2190,6 +2190,18 @@ function applyModel(holder,baseScene,key){
   const targetH=modelHeight(holder);
   const root=fitModel(baseScene,targetH);
 
+<<<<<<< HEAD
+=======
+  // SIMPLE, GLOBAL GLB FACING FIX:
+  // The gameplay holder is aimed at the player with e.lookAt(...). Three.js lookAt
+  // points the holder's local -Z toward the player, while the imported Meshy/Mixamo
+  // GLB bodies are authored facing the opposite way. Rotate the entire imported
+  // GLB wrapper 180 degrees, and do NOT run per-model facing calibration.
+  root.rotation.y = Math.PI;
+  root.userData = Object.assign({}, root.userData || {}, { _glbFacingFixY: Math.PI });
+  log('glb-180-facing-fix', key);
+
+>>>>>>> 462df812af0b9db1f7328699532f115e72e7056f
   while(holder.children.length)holder.remove(holder.children[0]);
   holder.add(root);
 
