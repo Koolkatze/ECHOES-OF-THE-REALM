@@ -2218,7 +2218,13 @@ function skinnedRestBox(root){
 function fitModel(src,targetH){
   const root=cloneRigged(src);
   root.traverse(o=>{if(o.isMesh){o.castShadow=false;o.frustumCulled=false;
-    if(o.material){const m=o.material.clone(); if(o.isSkinnedMesh)m.skinning=true; o.material=m;}}});
+    if(o.material){const m=o.material.clone(); if(o.isSkinnedMesh)m.skinning=true;
+      // Meshy GLBs ship alphaMode=BLEND on every material → three.js renders the whole body in the
+      // transparent pass, so its own front and back faces blend through each other and it looks
+      // inside-out / see-through. Force SOLID opaque rendering (alpha-clip any frayed-edge texels).
+      m.transparent=false; m.depthWrite=true; m.depthTest=true; m.blending=THREE.NormalBlending;
+      m.alphaTest=Math.max(m.alphaTest||0, 0.5); if(m.opacity!=null)m.opacity=1;
+      o.material=m;}}});
   // Wrap in a fresh group we fully control, and zero the clone's own root transform so any
   // baked-in offset from the animation GLB (which was lifting multi-anim models off-origin)
   // can't survive. Measure with updated world matrices for a correct bounding box.
@@ -4079,7 +4085,7 @@ $("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();
 /* surface any load/runtime error so we never get a silent dead UI */
 addEventListener("error",e=>{ try{ log("JS ERROR:", e.message, "@", (e.filename||"").split("/").pop()+":"+e.lineno); }catch(_){}});
 addEventListener("unhandledrejection",e=>{ try{ log("PROMISE REJECT:", (e.reason&&e.reason.message)||e.reason); }catch(_){}});
-log("BUILD READY v=lookat-13 · handlers wired");
+log("BUILD READY v=opaque-14 · handlers wired");
 </script>
 </body>
 </html>
