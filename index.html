@@ -1827,8 +1827,6 @@ async function testModels(){
   toast(found+"/"+all.length+" models found — details in 🐞",3500);
 }
 const MIXERS=[];
-const _faceV1=new THREE.Vector3(), _faceV2=new THREE.Vector3(), _fv=new THREE.Vector3();
-const _fq1=new THREE.Quaternion(), _fq2=new THREE.Quaternion(), _fq3=new THREE.Quaternion(), _AXISY=new THREE.Vector3(0,1,0);
 /* ===================================================================
    ANIMATION MANIFEST — per enemy/boss, the animation GLB files in
    animations/<folder>/, classified by gameplay role.
@@ -2139,7 +2137,6 @@ function fitModel(src,targetH){
   // center horizontally and plant feet at the holder origin
   root.position.set(-cx, -minY, -cz);
   root.userData=Object.assign({},root.userData||{}, {_baseScale:root.scale.x, _fitH:(+h).toFixed(2), _fitSc:(+sc).toFixed(2)});
-  holder.userData=Object.assign({},holder.userData||{}, {_inner:root});
   return holder;
 }
 /* play a role on an entity, cross-fading; one-shots (attack/hit/death) auto-return to locomotion */
@@ -2225,34 +2222,6 @@ function applyModel(holder,baseScene,key){
     // render loop can hold the body at that facing through spin/turn clips. The holder
     // itself lookAt()s the camera, so "rest facing" == "facing you". Anchored on the hip
     // bones to stay robust across each rig's odd bone bases; skipped if absent.
-    try{
-      const _inner=(root.userData&&root.userData._inner)||root;
-      let _L=null,_R=null,_LF=null,_LT=null,_RF=null,_RT=null,_HEAD=null,_HF=null,_NECK=null;
-      _inner.traverse(o=>{ if(o.isBone){ switch(o.name){
-        case 'LeftUpLeg':_L=o;break; case 'RightUpLeg':_R=o;break;
-        case 'LeftFoot':_LF=o;break; case 'LeftToeBase':_LT=o;break;
-        case 'RightFoot':_RF=o;break; case 'RightToeBase':_RT=o;break;
-        case 'Head':_HEAD=o;break; case 'headfront':_HF=o;break; case 'neck':_NECK=o;break; } } });
-      if(_L&&_R){
-        _inner.updateWorldMatrix(true,true);
-        const _loc=(o)=>{ const w=o.getWorldPosition(new THREE.Vector3()); _inner.worldToLocal(w); return w; };
-        const _lp=_loc(_L), _rp=_loc(_R);
-        const restAz=Math.atan2(_rp.x-_lp.x, _rp.z-_lp.z);          // hip-line azimuth (lateral)
-        let off=null;                                               // body forward = hipLine + off
-        if(_HEAD&&_HF){                                             // TRUE front = where the face looks at rest
-          const hp=_loc(_HEAD), fp=_loc(_HF);
-          const fAz=Math.atan2(fp.x-hp.x, fp.z-hp.z);
-          off=Math.atan2(Math.sin(fAz-restAz),Math.cos(fAz-restAz));
-        } else if(_LF&&_LT&&_RF&&_RT){                              // fallback: toes ahead of ankles
-          const lf=_loc(_LF),lt=_loc(_LT),rf=_loc(_RF),rt=_loc(_RT);
-          const fAz=Math.atan2((lt.x-lf.x)+(rt.x-rf.x),(lt.z-lf.z)+(rt.z-rf.z));
-          off=Math.atan2(Math.sin(fAz-restAz),Math.cos(fAz-restAz));
-        }
-        const faceLocal=(_HEAD&&_HF)?_HF.position.clone().normalize():null;
-        holder.userData._face={ wrap:root, inner:_inner, L:_L, R:_R, restAz, off, head:_HEAD, neck:_NECK, faceLocal };
-        log('face-lock armed',key,'fwd=',off==null?'rest-hold':((off*180/Math.PI).toFixed(0)+'\u00b0'),(_HEAD&&_HF)?'+head':'');
-      }
-    }catch(_e){ log('face-cal fail',_e&&_e.message||_e); }
     playRole(holder, set.clips.idle.length?'idle':'walk', {force:true});
     log('model+bundle-anim ready:',key,'· actions bound:',bound,
       'idle',set.clips.idle.length,'walk',set.clips.walk.length,'run',set.clips.run.length,'atk',set.clips.attack.length,'hit',set.clips.hit.length,'death',set.clips.death.length);
@@ -3676,37 +3645,6 @@ function loop(time,xrFrame){
   }
   for(const e of G.world) restorePosLocks(e);
   if(G.boss) restorePosLocks(G.boss);
-  // Hold each rigged body at its rest facing (which lookAt has pointed at the camera) so
-  // spin/turn animations can't make a foe attack with its back to you. Measured below the
-  // wrapper we rotate, so there is no feedback loop.
-  function faceCorrect(ent){
-    const f=ent&&ent.userData&&ent.userData._face; if(!f||!f.L||!f.R||!f.inner||!f.wrap)return;
-    f.inner.updateWorldMatrix(true,true);
-    // (a) BODY: aim the pelvis forward (hip-line + learned offset) at the holder's +Z (= camera).
-    const lw=f.L.getWorldPosition(_faceV1), rw=f.R.getWorldPosition(_faceV2);
-    f.inner.worldToLocal(lw); f.inner.worldToLocal(rw);
-    const curAz=Math.atan2(rw.x-lw.x, rw.z-lw.z);          // stable pelvis lateral axis (hip joints)
-    let dy = (f.off==null) ? (f.restAz-curAz) : -(curAz+f.off);
-    dy=Math.atan2(Math.sin(dy),Math.cos(dy));
-    f.wrap.rotation.y=dy;
-    // (b) HEAD: some clips twist the head/torso independently of the hips (e.g. a ghost turning
-    // its head right around). Bring the FACE back to the camera too, split across neck+head so no
-    // single joint snaps. Re-applied every frame on top of the fresh animation pose (no drift).
-    if(f.head&&f.faceLocal){
-      f.wrap.updateWorldMatrix(false,true);
-      const faceAz=()=>{ f.head.getWorldQuaternion(_fq1); _fv.copy(f.faceLocal).applyQuaternion(_fq1);
-        ent.getWorldQuaternion(_fq2).invert(); _fv.applyQuaternion(_fq2); return Math.atan2(_fv.x,_fv.z); };
-      const yaw=(bone,ang)=>{ bone.parent.getWorldQuaternion(_fq1); _fq2.setFromAxisAngle(_AXISY,ang);
-        _fq3.copy(_fq1).invert().multiply(_fq2).multiply(_fq1); bone.quaternion.premultiply(_fq3); };
-      const nrm=a=>Math.atan2(Math.sin(a),Math.cos(a));
-      let need=nrm(-faceAz());
-      if(f.neck){ yaw(f.neck, Math.max(-1.4,Math.min(1.4,need*0.55))); f.neck.updateWorldMatrix(false,true); }
-      need=nrm(-faceAz());
-      yaw(f.head, Math.max(-1.75,Math.min(1.75,need))); f.head.updateWorldMatrix(false,true);
-    }
-  }
-  for(const e of G.world) faceCorrect(e);
-  if(G.boss) faceCorrect(G.boss);
   handSwing(dt);
   renderer.render(scene,camera);
  }catch(err){
@@ -3927,7 +3865,7 @@ $("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();
 /* surface any load/runtime error so we never get a silent dead UI */
 addEventListener("error",e=>{ try{ log("JS ERROR:", e.message, "@", (e.filename||"").split("/").pop()+":"+e.lineno); }catch(_){}});
 addEventListener("unhandledrejection",e=>{ try{ log("PROMISE REJECT:", (e.reason&&e.reason.message)||e.reason); }catch(_){}});
-log("BUILD READY v=faces-12 · handlers wired");
+log("BUILD READY v=lookat-13 · handlers wired");
 </script>
 </body>
 </html>
