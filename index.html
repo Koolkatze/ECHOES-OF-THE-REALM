@@ -157,7 +157,6 @@
   <div class="rune-divider"></div>
   <button class="btn" id="btnBegin" data-i18n="begin">Begin the Pilgrimage</button>
   <button class="btn" id="btnContinue" style="display:none" data-i18n="continue">Continue a Pilgrimage</button>
-  <button class="btn ghost" id="btnAllEnemyTest">Phantom Test: All Enemies</button>
   <button class="btn ghost" id="btnSettings" data-i18n="settings">⚙ Settings</button>
   <div class="small" data-i18n="intro_blurb">The Herald — a thunder-light torn from the future — will weave a dark legend from the true history of wherever you stand. Walk to real places. Slay what waits there. Face the Echo at the end.</div>
 </div>
@@ -371,17 +370,6 @@
   z-index:301;background:#0008;color:#888;border:1px solid #444;font-size:10px;padding:4px 10px;border-radius:10px">🐞</button>
 <button id="dbgCopy" style="position:fixed;top:max(8px,env(safe-area-inset-top));left:calc(50% + 44px);
   z-index:301;background:#0008;color:#7CFC9A;border:1px solid #444;font-size:10px;padding:4px 10px;border-radius:10px;display:none">⧉ Copy</button>
-<div id="yawPanel" style="position:fixed;top:max(38px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:302;background:rgba(0,0,0,.78);color:#ffe9a8;border:1px solid #6e5cc4;border-radius:10px;padding:6px 8px;font:11px/1.4 monospace;display:flex;gap:5px;align-items:center;box-shadow:0 3px 14px #0008;flex-wrap:wrap;max-width:96vw;justify-content:center">
-  <span>TEST6 AXIS+FACE · RIG AXIS <b id="yawCurrent">90°</b></span>
-  <button class="yawBtn" data-yaw="90" style="background:#15131f;color:#cfc2a6;border:1px solid #3a3450;border-radius:6px;padding:4px 6px">90</button>
-  <button class="yawBtn" data-yaw="270" style="background:#15131f;color:#cfc2a6;border:1px solid #3a3450;border-radius:6px;padding:4px 6px">270</button>
-  <span style="margin-left:8px">FACE OFFSET <b id="faceCurrent">0°</b></span>
-  <button class="faceBtn" data-face="-90" style="background:#15131f;color:#cfc2a6;border:1px solid #3a3450;border-radius:6px;padding:4px 6px">-90</button>
-  <button class="faceBtn" data-face="0" style="background:#15131f;color:#cfc2a6;border:1px solid #3a3450;border-radius:6px;padding:4px 6px">0</button>
-  <button class="faceBtn" data-face="90" style="background:#15131f;color:#cfc2a6;border:1px solid #3a3450;border-radius:6px;padding:4px 6px">+90</button>
-  <button class="faceBtn" data-face="180" style="background:#15131f;color:#cfc2a6;border:1px solid #3a3450;border-radius:6px;padding:4px 6px">180</button>
-</div>
-
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -587,62 +575,12 @@ const Store=(()=>{
   };
 })();
 
-/* ---- TEST 3: manual enemy visual yaw tuner ----
-   Starts from TEST 1: no holder flip and no fixed 180° GLB correction.
-   Tap 0/90/180/270 in-game until the model front faces the camera, then report the value. */
-G.enemyModelYawDeg = Number(Store.get("eotr_enemy_model_yaw_deg", 0)) || 0;
-function normYawDeg(deg){ deg = ((Number(deg)||0) % 360 + 360) % 360; return deg; }
-function normFaceDeg(deg){ deg=Number(deg)||0; while(deg<=-180)deg+=360; while(deg>180)deg-=360; return deg; }
-function updateYawPanel(){
-  const cur=document.getElementById("yawCurrent");
-  if(cur)cur.textContent=normYawDeg(G.enemyModelYawDeg)+"°";
-  document.querySelectorAll(".yawBtn").forEach(b=>{
-    const on=normYawDeg(b.dataset.yaw)===normYawDeg(G.enemyModelYawDeg);
-    b.style.borderColor=on?"#e8b33a":"#3a3450";
-    b.style.color=on?"#ffe9a8":"#cfc2a6";
-  });
-  const fcur=document.getElementById("faceCurrent");
-  if(fcur)fcur.textContent=normFaceDeg(G.enemyFaceOffsetDeg)+"°";
-  document.querySelectorAll(".faceBtn").forEach(b=>{
-    const on=normFaceDeg(b.dataset.face)===normFaceDeg(G.enemyFaceOffsetDeg);
-    b.style.borderColor=on?"#e8b33a":"#3a3450";
-    b.style.color=on?"#ffe9a8":"#cfc2a6";
-  });
-}
-function applyEnemyModelYawToExisting(){
-  const rad=THREE.MathUtils.degToRad(normYawDeg(G.enemyModelYawDeg));
-  if(scene&&scene.traverse){
-    scene.traverse(o=>{ if(o&&o.name==="manual_model_yaw_pivot") o.rotation.y=rad; });
-  }
-}
-function setEnemyModelYawDeg(deg){
-  G.enemyModelYawDeg=normYawDeg(deg);
-  Store.set("eotr_enemy_model_yaw_deg", G.enemyModelYawDeg);
-  applyEnemyModelYawToExisting();
-  updateYawPanel();
-  log("TEST6 rig axis yaw set", G.enemyModelYawDeg+"°");
-  try{toast("RIG AXIS "+G.enemyModelYawDeg+"°",1200);}catch(e){}
-}
-function setEnemyFaceOffsetDeg(deg){
-  G.enemyFaceOffsetDeg=normFaceDeg(deg);
-  Store.set("eotr_enemy_face_offset_deg", G.enemyFaceOffsetDeg);
-  updateYawPanel();
-  log("TEST6 face offset set", G.enemyFaceOffsetDeg+"°");
-  try{toast("FACE OFFSET "+G.enemyFaceOffsetDeg+"°",1200);}catch(e){}
-}
-function applyEnemyFaceOffsetY(obj){
-  const deg=normFaceDeg(G.enemyFaceOffsetDeg||0);
-  if(deg) obj.rotateY(THREE.MathUtils.degToRad(deg));
-}
-addEventListener("DOMContentLoaded",()=>{
-  document.querySelectorAll(".yawBtn").forEach(b=>{
-    b.onclick=(ev)=>{ev.preventDefault();ev.stopPropagation();setEnemyModelYawDeg(b.dataset.yaw);};
-  });
-  document.querySelectorAll(".faceBtn").forEach(b=>{
-    b.onclick=(ev)=>{ev.preventDefault();ev.stopPropagation();setEnemyFaceOffsetDeg(b.dataset.face);};
-  });
-  updateYawPanel();
-});
+/* ---- Enemy model facing (baked from on-device tuning) ----
+   The rig forward axis needs a fixed +90 deg yaw inside the holder, plus a -90 deg yaw
+   applied to the holder after lookAt(); together they make every enemy face the player. */
+const ENEMY_RIG_YAW_DEG = 90;
+const ENEMY_FACE_OFFSET_DEG = -90;
+function applyEnemyFaceOffsetY(obj){ if(ENEMY_FACE_OFFSET_DEG) obj.rotateY(THREE.MathUtils.degToRad(ENEMY_FACE_OFFSET_DEG)); }
 
 const PAGE_ROOT=location.href.replace(/[?#].*$/,"").replace(/[^/]*$/,"");
 const PAGE_MODELS=PAGE_ROOT+"models/";
@@ -1869,11 +1807,6 @@ const ModelCache={cache:{},missing:{},inflight:{},
 async function preloadModels(onProgress){
   if(!(await ensureGLTFLoader())||!THREE.GLTFLoader){log("preload skipped — no GLTFLoader");return;}
   const pool=new Set(BIOME_ENEMIES[G.env]||BIOME_ENEMIES.town);
-  // Phantom orientation gallery: preload literally every regular enemy and boss.
-  if(G.allEnemyTest){
-    Object.keys(ENEMY_STATS).forEach(k=>pool.add(k));
-    Object.keys(BOSS_BUILDERS).forEach(k=>pool.add("boss_"+k));
-  }
   // include any decor-biased fillers for this quest's spots, plus the boss
   for(const sp of (G.spots||[])) (DECOR_BIAS[sp.decor]||[]).forEach(k=>pool.add(k));
   if(G.legend&&G.legend.boss)pool.add("boss_"+G.legend.boss.type);
@@ -2291,20 +2224,21 @@ function playRole(entity, role, opts={}){
 }
 function applyModel(holder,baseScene,key){
   const targetH=modelHeight(holder);
+  holder.userData._mh=targetH;
   const root=fitModel(baseScene,targetH);
 
   // TEST 6 — rig-axis yaw tuner.
   // Use only 90/270 here: these values keep the multi-animation rig structurally normal.
   // FACE OFFSET is applied to the gameplay holder after lookAt(), not to this visual pivot.
   const yawPivot=new THREE.Group();
-  yawPivot.name="manual_model_yaw_pivot";
-  yawPivot.rotation.y=THREE.MathUtils.degToRad(normYawDeg(G.enemyModelYawDeg));
+  yawPivot.name="model_yaw_pivot";
+  yawPivot.rotation.y=THREE.MathUtils.degToRad(ENEMY_RIG_YAW_DEG);
   yawPivot.add(root);
   while(holder.children.length)holder.remove(holder.children[0]);
   holder.add(yawPivot);
   holder.userData._modelPivot=yawPivot;
   holder.userData._modelYawPivot=yawPivot;
-  log('test6-rig-axis-yaw',key,'yaw=',normYawDeg(G.enemyModelYawDeg)+'°','faceOffset=',normFaceDeg(G.enemyFaceOffsetDeg)+'°');
+  if(holder.userData._np&&holder.userData._np.sprite)holder.add(holder.userData._np.sprite);
 
   const oldA=holder.userData&&holder.userData.anim;
   if(oldA&&!['hover','bob','heavy'].includes(oldA.kind))holder.userData.anim=null;
@@ -2490,10 +2424,10 @@ function sampleHitTest(xrFrame){
 G.worldBuilt=false;
 const ENGAGE_R=20;      // legacy UI/debug only
 const FIGHT_DIST=2.0;   // metres: melee enemies close to real arm's-reach and attack here
-const HIT_REACH=2.7;    // metres: attack lands around the 2 m fight ring
+const HIT_REACH=2.3;    // metres: attack lands around the 2 m fight ring
 const PURSUE_R=45;      // metres: enemy gives chase after being visible for a moment
 const VISIBLE_R=60;     // metres: enemies are first drawn at real world distance
-const FLY_MIN_DIST=2.5; // flying foes keep a touch more personal space (they sit at head height)
+const FLY_MIN_DIST=2.2; // flying foes keep a touch more personal space (they sit at head height)
 const BOSS_MIN_DIST=4.0; // bosses keep a slightly wider ring so large models stay in frame
 const SAFE_SPAWN_MIN=34; // no newly created foe may be closer than this to the player
 const SAFE_SPAWN_MAX=58; // live spawns appear near the edge of visibility, then walk in
@@ -2515,14 +2449,73 @@ function safeSpawnLatLon(lat,lon,minR=SAFE_SPAWN_MIN,maxR=SAFE_SPAWN_MAX){
   const r=rand(minR,maxR);
   return offsetLatLon(G.lat,G.lon,Math.cos(a)*r,Math.sin(a)*r);
 }
+/* ---- enemy level + nameplate helpers (name over head, HP bar, level scaling) ---- */
+const NICE_NAMES={spirit:"Lost Spirit",skeleton:"Skeleton",tentacle:"Deep Horror",wolf:"Dire Wolf",
+  goblin:"Goblin",hypoglif:"Hypoglif",snake:"Serpent",crow:"Carrion Crow",fulion:"Fulion",
+  minotaur:"Minotaur",gargoyle:"Gargoyle",treant:"Treant",crabgolem:"Crab Golem",drowned:"Drowned"};
+function displayNameFor(u){
+  if(u.name && u.name!==u.kind) return u.name;
+  const k=(u.kind||"husk").replace(/^boss_/,"");
+  return NICE_NAMES[k] || (k.charAt(0).toUpperCase()+k.slice(1));
+}
+function heatNear(lat,lon){
+  let best=0.4, bd=Infinity;
+  if(HEAT&&HEAT.clusters&&HEAT.clusters.length){
+    for(const cl of HEAT.clusters){ const d=Math.hypot(cl.lat-lat,cl.lon-lon); if(d<bd){bd=d; best=cl.heat||0;} }
+  }
+  return best;
+}
+function rollLevel(heat){
+  const h=(typeof heat==="number"&&isFinite(heat))?Math.max(0,Math.min(1,heat)):0.4;
+  const base=1+Math.round(h*7);                                // 1..8 from local danger
+  const prog=Math.floor(((G.player&&G.player.souls)||0)/250);  // +1 per 250 echoes earned
+  const jit=Math.floor(Math.random()*3)-1;                     // -1..+1 variety
+  return Math.max(1, Math.min(20, base+prog+jit));
+}
+function lvlHp(base,lvl){return Math.max(1,Math.round(base*(1+(lvl-1)*0.35)));}
+function lvlDmg(base,lvl){return Math.max(1,Math.round(base*(1+(lvl-1)*0.22)));}
+function lvlSouls(base,lvl){return Math.max(1,Math.round(base*(1+(lvl-1)*0.30)));}
+function drawNameplate(e){
+  const u=e.userData, np=u._np; if(!np)return;
+  const c=np.canvas, x=c.getContext("2d"), W=c.width, H=c.height;
+  x.clearRect(0,0,W,H);
+  const lvl=u.lvl||1, name=u.dispName||displayNameFor(u);
+  const frac=Math.max(0,Math.min(1,(u.hp||0)/(u.hpMax||1)));
+  x.textAlign="center"; x.textBaseline="middle";
+  x.font="bold 26px monospace"; x.lineWidth=5; x.strokeStyle="rgba(0,0,0,.9)";
+  const label="Lv "+lvl+"   "+name;
+  x.strokeText(label,W/2,20); x.fillStyle="#ffe9a8"; x.fillText(label,W/2,20);
+  const bx=22,by=44,bw=W-44,bh=22;
+  x.fillStyle="rgba(0,0,0,.78)"; x.fillRect(bx-3,by-3,bw+6,bh+6);
+  x.fillStyle="#241016"; x.fillRect(bx,by,bw,bh);
+  x.fillStyle = frac>.5?"#49c84e":frac>.25?"#e8b33a":"#d63a3a";
+  x.fillRect(bx,by,Math.max(0,bw*frac),bh);
+  x.lineWidth=2; x.strokeStyle="rgba(232,179,58,.95)"; x.strokeRect(bx,by,bw,bh);
+  np.tex.needsUpdate=true;
+}
+function attachNameplate(e){
+  if(e.userData._np)return;
+  try{
+    const canvas=document.createElement("canvas"); canvas.width=320; canvas.height=80;
+    const tex=new THREE.CanvasTexture(canvas); tex.needsUpdate=true;
+    const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false});
+    const sp=new THREE.Sprite(mat); sp.name="enemy_nameplate";
+    sp.position.set(0,2.2,0); sp.scale.set(1.8,0.45,1); sp.renderOrder=998;
+    e.userData._np={canvas,tex,sprite:sp};
+    e.add(sp); drawNameplate(e);
+  }catch(err){ log("nameplate failed", err&&err.message||err); }
+}
 function makeWorldEnemy(type,lat,lon){
   const st=ENEMY_STATS[type];
   const e=applyRealism(BUILDERS[type](),type);
   e.visible=false;                              // stays hidden until the loop has placed it
-  e.userData={enemy:true,world:true,kind:type,hp:st.hp,hpMax:st.hp,state:"idle",cd:rand(1,2.5),
-    name:type,speed:st.speed*rand(.85,1.15),dmg:st.dmg,souls:st.souls,fly:st.fly||0,
+  const _lvl=rollLevel(heatNear(lat,lon));
+  const _hp=lvlHp(st.hp,_lvl);
+  e.userData={enemy:true,world:true,kind:type,lvl:_lvl,hp:_hp,hpMax:_hp,state:"idle",cd:rand(1,2.5),
+    name:type,speed:st.speed*rand(.85,1.15),dmg:lvlDmg(st.dmg,_lvl),souls:lvlSouls(st.souls,_lvl),fly:st.fly||0,
     anim:e.anim,animRefs:e,lat,lon,_placed:false,
     wanderAng:Math.random()*6.28,wanderT:0,homeLat:lat,homeLon:lon,spawnGrace:performance.now()+SPAWN_GRACE_MS};
+  e.userData.dispName=displayNameFor(e.userData);
   // Park it FAR away on the floor immediately, so even for one frame it is never at the lens.
   const fy=(typeof G!=="undefined"&&isFinite(G.floorY))?G.floorY:0;
   e.position.set(0, fy, -999);
@@ -2542,67 +2535,7 @@ function makeWorldBoss(lat,lon){
   m.anim=m.anim;scene.add(m);G.world.push(m);G.boss=m;return m;
 }
 
-/* =====================================================================
-   PHANTOM ORIENTATION GALLERY
-   Spawns one of every regular enemy and one of every boss in a fixed
-   virtual grid in front of the player. Used only for the yaw/facing test.
-   ===================================================================== */
-function addTestNameBillboard(parent,label){
-  try{
-    const cnv=document.createElement("canvas"); cnv.width=512; cnv.height=128;
-    const ctx=cnv.getContext("2d");
-    ctx.clearRect(0,0,512,128);
-    ctx.fillStyle="rgba(0,0,0,.62)"; ctx.fillRect(0,16,512,76);
-    ctx.strokeStyle="rgba(232,179,58,.85)"; ctx.lineWidth=3; ctx.strokeRect(2,18,508,72);
-    ctx.font="bold 42px monospace"; ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillStyle="#ffe9a8"; ctx.fillText(label,256,56);
-    ctx.font="22px monospace"; ctx.fillStyle="#9f96b8"; ctx.fillText("yaw test",256,96);
-    const tex=new THREE.CanvasTexture(cnv); tex.needsUpdate=true;
-    const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false});
-    const sp=new THREE.Sprite(mat); sp.name="phantom_enemy_name_label";
-    sp.position.set(0,2.15,0); sp.scale.set(2.8,.7,1); sp.renderOrder=999;
-    parent.add(sp);
-  }catch(e){ log("label failed",label,e.message||e); }
-}
-function makeGalleryBoss(type,lat,lon){
-  const m=applyRealism((BOSS_BUILDERS[type]||BOSS_BUILDERS.knight)(),type);
-  tryUpgradeModel(m,"boss_"+type);
-  m.visible=false;
-  const fy=(typeof G!=="undefined"&&isFinite(G.floorY))?G.floorY:0;
-  m.position.set(0,fy,-999);
-  m.userData={boss:true,world:true,gallery:true,kind:"boss_"+type,hp:999,hpMax:999,phase:0,state:"idle",cd:999,combo:[],comboT:0,
-    speed:0,name:"boss_"+type,dmg:0,lat,lon,homeLat:lat,homeLon:lon,introDone:true,_placed:false,
-    bearing:undefined,_wind:false,spawnGrace:Number.POSITIVE_INFINITY};
-  addTestNameBillboard(m,"boss_"+type);
-  scene.add(m); G.world.push(m); return m;
-}
-function buildAllEnemyTestWorld(){
-  if(G.worldBuilt)return; G.worldBuilt=true;
-  const enemyKeys=Object.keys(ENEMY_STATS);
-  const bossKeys=Object.keys(BOSS_BUILDERS).map(k=>"boss_"+k);
-  const keys=[...enemyKeys,...bossKeys];
-  const cols=5, gapE=7.0, gapN=8.0, startN=10.0;
-  const {mlat,mlon}=metersPerDeg(G.lat);
-  for(let idx=0;idx<keys.length;idx++){
-    const key=keys[idx];
-    const row=Math.floor(idx/cols), col=idx%cols;
-    const dN=startN+row*gapN;
-    const dE=(col-(cols-1)/2)*gapE;
-    const lat=G.lat+dN/mlat, lon=G.lon+dE/mlon;
-    let ent;
-    if(key.startsWith("boss_")) ent=makeGalleryBoss(key.slice(5),lat,lon);
-    else{ ent=makeWorldEnemy(key,lat,lon); ent.userData.gallery=true; ent.userData.spawnGrace=Number.POSITIVE_INFINITY; ent.userData.state="idle"; addTestNameBillboard(ent,key); }
-    if(ent&&ent.userData){
-      ent.userData.name=key; ent.userData.homeLat=lat; ent.userData.homeLon=lon; ent.userData.speed=0; ent.userData.dmg=0;
-    }
-  }
-  G._worldGrace=Number.POSITIVE_INFINITY;
-  G._worldSpawnAllowedAt=Number.POSITIVE_INFINITY;
-  log("PHANTOM gallery built:",keys.length,"entities:",keys.join(","));
-  try{toast("Phantom gallery: "+keys.length+" enemies loaded",2600);}catch(e){}
-}
 function buildWorld(){
-  if(G.allEnemyTest){ buildAllEnemyTestWorld(); return; }
   if(G.worldBuilt)return;G.worldBuilt=true;
   // 1) enemies from every heat cluster, scattered around each cluster centre
   for(const cl of HEAT.clusters){
@@ -2745,6 +2678,14 @@ function updateWorld(dt){
     u._gpsDist=trueDist; u._realDist=realD; u._spawnBlocked=spawnBlocked;
 
     if(safeLookAtY(e,cpx,cpz)) applyEnemyFaceOffsetY(e);
+    if(!u.boss && !u.dead){                                   // floating name + HP bar
+      if(!u._np) attachNameplate(e);
+      if(u._np){
+        if(u._np.sprite.parent!==e) e.add(u._np.sprite);      // survive async model swap
+        u._np.sprite.position.y=(u._mh&&isFinite(u._mh)?u._mh:1.85)+0.4;
+        u._np.sprite.visible = renderDist < 18;
+      }
+    }
     const moving = u.state==="active" && trueDist>HARD_MIN+0.35;
     if(u.state==="dead"){
     }else if(u.state==="active"){
@@ -3008,7 +2949,7 @@ function enemyCombat(e,dt){
   const _cp=camWorldPos();
   const dHoriz=Math.hypot(_cp.x-e.position.x,_cp.z-e.position.z);
   const gpsD=isFinite(u._gpsDist)?u._gpsDist:dHoriz;
-  const reach=u._attackReach||HIT_REACH;
+  const reach=Math.min(u._attackReach||HIT_REACH, 2.6);  // never hit from beyond ~2 m
   const canHit = gpsD<=reach && dHoriz<=reach+0.25 && dHoriz>=FIGHT_DIST-0.75;
 
   if(u._wind){
@@ -3159,7 +3100,10 @@ function dodge(){
   G.player.st-=20;invuln=.6;updBars();Audio.sfx("dodge");toast(curLang()==="es"?"⟿ esquiva":"⟿ dodge",500);
 }
 function damage(tgt,d){
-  const u=tgt.userData;if(u.dead)return;u.hp-=d;
+  const u=tgt.userData;if(u.dead)return;
+  if(u.lvl&&u.lvl>1) d=Math.max(1,Math.round(d/(1+(u.lvl-1)*0.10)));  // higher level = more resistant
+  u.hp-=d;
+  if(u._np)drawNameplate(tgt);
   if(!u.hasClips){flash(tgt,0xffffff);setTimeout(()=>unflash(tgt),90);}
   Audio.sfx("hit");
   if(u.boss){$("bossfill").style.transform=`scaleX(${clamp(u.hp/u.hpMax,0,1)})`;}
@@ -3925,50 +3869,12 @@ $("btnEnterFlat").onclick=()=>{hide("questScreen");enterFlat();};
 })();
 function beginGame(){
   log("beginGame · xr:",G.xr,"· intro lines:",G.legend.intro.length);applySettings();Audio.startMusic();
-  if(G.allEnemyTest){
-    G._worldGrace=Number.POSITIVE_INFINITY; G._worldSpawnAllowedAt=Number.POSITIVE_INFINITY;
-  }else{
-    G._worldGrace=performance.now()+8000; G._worldSpawnAllowedAt=performance.now()+9000;
-  }
+  G._worldGrace=performance.now()+8000; G._worldSpawnAllowedAt=performance.now()+9000;
   buildWorld();
   $("hud").style.display="block";updBars();
   Dlg.say(G.legend.intro,()=>startTravel());
 }
-async function bootAllEnemiesTest(){
-  log("boot phantom all-enemy yaw gallery");
-  G.demo=true; G.allEnemyTest=true; activeSlot=null;
-  hide("titleScreen"); show("loadScreen");
-  $("loadingTxt").textContent="Building phantom enemy gallery…";
-  initHeading();
-  // Stable fake coordinate. No GPS permission needed.
-  G.lat=41.3874; G.lon=2.1686; G.heading=0; G.env="town";
-  G.player={hp:999,hpMax:999,mp:999,mpMax:999,st:999,stMax:999,souls:0};
-  G.legend={
-    regionName:"Phantom Enemy Gallery",
-    intro:["This is a test realm. Every enemy is present. Change MODEL YAW and write down which value makes each model face you."],
-    gear:{clothing:["None — testing only"],objects:["Use the MODEL YAW panel"],transport:["Flat mode recommended"]},
-    boss:{name:"Gallery Echo",title:"the Facing Test",type:"wraith",lore:"A diagnostic echo.",phases:[{name:"Test",taunt:"Observe."}]},
-    notes:[],zoneThemes:{},
-    spots:[{realName:"Phantom Origin",fantasyName:"All-Enemy Test Line",clue:"Test complete.",decor:"ruins",enemy:"all"}]
-  };
-  G.spots=[{...G.legend.spots[0],lat:G.lat+0.00025,lon:G.lon}];
-  HEAT.clusters=[]; HEAT.grid=[]; G.heatCenter={lat:G.lat,lon:G.lon,radius:80};
-  if(scene){
-    for(const e of (G.world||[])) scene.remove(e);
-  }
-  G.world=[]; G.enemies=[]; G.loots=[]; G.boss=null; G.worldBuilt=false;
-  $("loadingTxt").textContent="Preloading every enemy and boss…";
-  await preloadModels((d,n,k)=>{$("loadingTxt").textContent=`Preloading gallery… ${d}/${n} ${k||""}`;});
-  hide("loadScreen");
-  $("questPanel").innerHTML=`<h3>Phantom Enemy Gallery</h3>
-    <p>This mode spawns one of every regular enemy and boss in a grid in front of you.</p>
-    <p style="color:#ffe9a8">TEST 6: use RIG AXIS 90/270 to avoid the mirror/self-overlap, then FACE OFFSET -90/0/+90/180 until enemies look at you.</p>
-    <ul class="spotlist"><li><b>Regular enemies</b><span>${Object.keys(ENEMY_STATS).join(", ")}</span></li>
-    <li><b>Bosses</b><span>${Object.keys(BOSS_BUILDERS).map(k=>"boss_"+k).join(", ")}</span></li></ul>`;
-  show("questScreen");
-}
 $("btnBegin").onclick=()=>{initGL();boot();};
-$("btnAllEnemyTest").onclick=()=>{initGL();bootAllEnemiesTest();};
 $("btnContinue").onclick=()=>{renderSlots();show("savesScreen");};
 $("btnSavesClose").onclick=()=>hide("savesScreen");
 /* ---- settings UI ---- */
@@ -4085,7 +3991,7 @@ $("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();
 /* surface any load/runtime error so we never get a silent dead UI */
 addEventListener("error",e=>{ try{ log("JS ERROR:", e.message, "@", (e.filename||"").split("/").pop()+":"+e.lineno); }catch(_){}});
 addEventListener("unhandledrejection",e=>{ try{ log("PROMISE REJECT:", (e.reason&&e.reason.message)||e.reason); }catch(_){}});
-log("BUILD READY v=opaque-14 · handlers wired");
+log("BUILD READY v=lvlbars-16 · handlers wired");
 </script>
 </body>
 </html>
