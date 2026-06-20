@@ -3237,61 +3237,89 @@ const LORE={
   boss_sorcerer:["Echo: Deep Magus","It traded its face for the tide's oldest secret."],
   boss_colossus:["Echo: Pearl Colossus","Stone made to guard, corrupted to remember only the guarding."],
 };
-let bestGL=null,bestScene=null,bestCam=null,bestModel=null,bestOpen=false,bestSel=null;
-function bestInit(){
-  if(bestGL)return;
-  bestGL=new THREE.WebGLRenderer({canvas:$("bestPrev"),antialias:true,alpha:true});
-  bestGL.outputEncoding=THREE.sRGBEncoding;bestGL.toneMapping=THREE.ACESFilmicToneMapping;
-  bestGL.setSize(300,300,false);
-  bestScene=new THREE.Scene();
-  bestCam=new THREE.PerspectiveCamera(40,1,.05,30);
-  bestScene.add(new THREE.HemisphereLight(0x9988ff,0x171008,1.1));
-  const dl=new THREE.DirectionalLight(0xffe2b0,.9);dl.position.set(2,3,2);bestScene.add(dl);
+let bestScene=null,bestOpen=false,bestSel=null,bestPortraitCache={};
+/* Software-render a beast model to a 2D canvas (no 2nd WebGL context → works in AR & camera mode).
+   Pre-transforms skinned/static verts to world space, then z-buffered flat-shaded rasterization. */
+function softRenderBeast(root, canvas){
+  try{
+    if(!root||!canvas) return false;
+    root.updateMatrixWorld(true);
+    const W=canvas.width, H=canvas.height, ctx=canvas.getContext("2d");
+    const meshes=[]; const v=new THREE.Vector3();
+    const mn=new THREE.Vector3(1e9,1e9,1e9), mx=new THREE.Vector3(-1e9,-1e9,-1e9);
+    root.traverse(o=>{
+      if(!o.isMesh||!o.geometry||!o.geometry.attributes||!o.geometry.attributes.position) return;
+      if(o.material&&o.material.transparent&&o.material.opacity!=null&&o.material.opacity<0.15) return;
+      const pos=o.geometry.attributes.position, wm=o.matrixWorld, sk=o.isSkinnedMesh;
+      if(sk){try{o.skeleton.update();}catch(e){}}
+      const P=new Float32Array(pos.count*3);
+      for(let i=0;i<pos.count;i++){ if(sk)o.boneTransform(i,v); else v.set(pos.getX(i),pos.getY(i),pos.getZ(i)); v.applyMatrix4(wm);
+        P[i*3]=v.x;P[i*3+1]=v.y;P[i*3+2]=v.z;
+        if(v.x<mn.x)mn.x=v.x; if(v.y<mn.y)mn.y=v.y; if(v.z<mn.z)mn.z=v.z;
+        if(v.x>mx.x)mx.x=v.x; if(v.y>mx.y)mx.y=v.y; if(v.z>mx.z)mx.z=v.z; }
+      meshes.push({P, idx:o.geometry.index});
+    });
+    if(!meshes.length||!isFinite(mn.x)) return false;
+    const cx=(mn.x+mx.x)/2, cy=(mn.y+mx.y)/2;
+    const scale=0.82*Math.min(W/((mx.x-mn.x)||1), H/((mx.y-mn.y)||1));
+    const img=ctx.createImageData(W,H), data=img.data, zb=new Float32Array(W*H).fill(-1e9);
+    const Lx=0.4,Ly=0.55,Lz=0.72, Ll=Math.hypot(Lx,Ly,Lz);
+    for(const m of meshes){
+      const P=m.P, idx=m.idx, n=idx?idx.count:(P.length/3);
+      for(let t=0;t+2<n;t+=3){
+        const ia=idx?idx.getX(t):t, ib=idx?idx.getX(t+1):t+1, ic=idx?idx.getX(t+2):t+2;
+        const a0=P[ia*3],a1=P[ia*3+1],a2=P[ia*3+2];
+        const b0=P[ib*3],b1=P[ib*3+1],b2=P[ib*3+2];
+        const c0=P[ic*3],c1=P[ic*3+1],c2=P[ic*3+2];
+        const ux=b0-a0,uy=b1-a1,uz=b2-a2, wx=c0-a0,wy=c1-a1,wz=c2-a2;
+        const nx=uy*wz-uz*wy, ny=uz*wx-ux*wz, nz=ux*wy-uy*wx;
+        if(nz<=0) continue;
+        const nl=Math.hypot(nx,ny,nz)||1, sh=Math.max(0.16,(nx*Lx+ny*Ly+nz*Lz)/(nl*Ll));
+        let r=(48+sh*200)|0, gn=(42+sh*176)|0, bl=(32+sh*140)|0;
+        if(r>255)r=255; if(gn>255)gn=255; if(bl>255)bl=255;
+        const ax=W/2+(a0-cx)*scale, ay=H/2-(a1-cy)*scale;
+        const bx=W/2+(b0-cx)*scale, by=H/2-(b1-cy)*scale;
+        const ccx=W/2+(c0-cx)*scale, ccy=H/2-(c1-cy)*scale;
+        const area=(bx-ax)*(ccy-ay)-(ccx-ax)*(by-ay); if(area<1e-7&&area>-1e-7) continue;
+        const inv=1/area;
+        const minx=Math.max(0,Math.floor(Math.min(ax,bx,ccx))), maxx=Math.min(W-1,Math.ceil(Math.max(ax,bx,ccx)));
+        const miny=Math.max(0,Math.floor(Math.min(ay,by,ccy))), maxy=Math.min(H-1,Math.ceil(Math.max(ay,by,ccy)));
+        for(let y=miny;y<=maxy;y++){ for(let x=minx;x<=maxx;x++){
+          const w0=((bx-x)*(ccy-y)-(ccx-x)*(by-y))*inv;
+          const w1=((ccx-x)*(ay-y)-(ax-x)*(ccy-y))*inv;
+          const w2=1-w0-w1;
+          if(w0<-0.01||w1<-0.01||w2<-0.01) continue;
+          const z=w0*a2+w1*b2+w2*c2, k=y*W+x;
+          if(z>zb[k]){ zb[k]=z; const p=k*4; data[p]=r; data[p+1]=gn; data[p+2]=bl; data[p+3]=255; }
+        }}
+      }
+    }
+    ctx.putImageData(img,0,0);
+    return true;
+  }catch(e){ log("beast portrait fail", e&&e.message||e); return false; }
 }
 function bestShow(key){
-  bestSel=key;bestInit();
-  if(bestModel)bestScene.remove(bestModel);
-  const builder=key.startsWith("boss_")?BOSS_BUILDERS[key.slice(5)]:BUILDERS[key];
-  bestModel=applyRealism(builder(),key.startsWith("boss_")?key.slice(5):key);bestScene.add(bestModel);
-  tryUpgradeModel(bestModel,key).then(()=>{
-    if(!bestModel)return;
-    const bb=new THREE.Box3().setFromObject(bestModel);
-    const sz=bb.getSize(new THREE.Vector3()),ct=bb.getCenter(new THREE.Vector3());
-    const rr=Math.max(sz.x,sz.y,sz.z);
-    bestCam.position.set(ct.x+rr*1.1,ct.y+rr*.45,ct.z+rr*1.5);bestCam.lookAt(ct);
-    // showcase: loop idle, then occasionally an attack
-    if(bestModel.userData.hasClips){
-      playRole(bestModel,"idle");
-      clearInterval(bestModel._showcase);
-      bestModel._showcase=setInterval(()=>{
-        if(!bestOpen||!bestModel||!bestModel.userData.animSet)return;
-        const set=bestModel.userData.animSet;
-        if(set.busy && performance.now()<set.busyUntil)return;
-        if(Math.random()<0.6 && set.clips.attack.length) playRole(bestModel,"attack");
-        else playRole(bestModel, set.clips.idle.length?"idle":"walk");
-      },2200);
-    }
-  });
-  // frame the model
-  const box=new THREE.Box3().setFromObject(bestModel);
-  const size=box.getSize(new THREE.Vector3()),ctr=box.getCenter(new THREE.Vector3());
-  const r=Math.max(size.x,size.y,size.z);
-  bestCam.position.set(ctr.x+r*1.1,ctr.y+r*.45,ctr.z+r*1.5);
-  bestCam.lookAt(ctr);
+  bestSel=key;
+  const canvas=$("bestPrev");
   const [nm,lr]=LORE[key]||[key,""];
   const st=key.startsWith("boss_")?null:ENEMY_STATS[key];
   $("bestName").textContent=nm;
   $("bestStats").textContent=(st?`HP ${st.hp} · DMG ${st.dmg} · ${st.fly?"flies · ":""}${st.souls} echoes · `:"ECHO (boss) · ")+`slain ×${G.kills[key]||0}`;
   $("bestLore").textContent=lr;
   document.querySelectorAll(".bchip").forEach(c=>c.classList.toggle("sel",c.dataset.k===key));
-}
-function bestLoop(t){
-  if(!bestOpen)return;
-  if(bestModel){bestModel.rotation.y+=.012;
-    if(bestModel.anim)animEnemy({userData:{anim:bestModel.anim,animRefs:bestModel,fly:0},
-      position:bestModel.position,rotation:bestModel.rotation,id:1},.016,(t||0)/1000);}
-  bestGL.render(bestScene,bestCam);
-  requestAnimationFrame(bestLoop);
+  if(bestPortraitCache[key]){ try{canvas.getContext("2d").putImageData(bestPortraitCache[key],0,0);}catch(e){} return; }
+  const builder=key.startsWith("boss_")?BOSS_BUILDERS[key.slice(5)]:BUILDERS[key];
+  if(typeof builder!=="function"){ log("bestiary: no builder for",key); try{canvas.getContext("2d").clearRect(0,0,canvas.width,canvas.height);}catch(e){} return; }
+  const holder=applyRealism(builder(),key.startsWith("boss_")?key.slice(5):key);
+  holder.rotation.y=THREE.MathUtils.degToRad(ENEMY_FACE_OFFSET_DEG);   // match gameplay facing → front toward camera
+  const stage=new THREE.Group(); stage.add(holder);
+  softRenderBeast(stage, canvas);                                       // quick procedural portrait first
+  tryUpgradeModel(holder,key).then(()=>{
+    if(bestSel!==key) return;                                          // user moved to another beast
+    if(softRenderBeast(stage, canvas)){
+      try{ bestPortraitCache[key]=canvas.getContext("2d").getImageData(0,0,canvas.width,canvas.height); }catch(e){}
+    }
+  });
 }
 function renderBestiary(){
   const list=$("bestList");list.innerHTML="";
@@ -3310,9 +3338,9 @@ function renderBestiary(){
   if(first)bestShow(bestSel&&G.kills[bestSel]>0?bestSel:first);
   else{$("bestName").textContent=t("nothing_slain");$("bestStats").textContent="";
     $("bestLore").textContent=t("ledger");
-    if(bestModel){bestScene&&bestScene.remove(bestModel);bestModel=null;}}
+    try{const c=$("bestPrev");c.getContext("2d").clearRect(0,0,c.width,c.height);}catch(e){}}
 }
-$("btnBestiary").onclick=()=>{$("inv").style.display="none";renderBestiary();show("bestiaryScreen");bestOpen=true;requestAnimationFrame(bestLoop);};
+$("btnBestiary").onclick=()=>{$("inv").style.display="none";show("bestiaryScreen");bestOpen=true;renderBestiary();};
 $("btnBestClose").onclick=()=>{bestOpen=false;hide("bestiaryScreen");$("inv").style.display="flex";};
 
 /* =====================================================================
@@ -3993,7 +4021,7 @@ $("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();
 /* surface any load/runtime error so we never get a silent dead UI */
 addEventListener("error",e=>{ try{ log("JS ERROR:", e.message, "@", (e.filename||"").split("/").pop()+":"+e.lineno); }catch(_){}});
 addEventListener("unhandledrejection",e=>{ try{ log("PROMISE REJECT:", (e.reason&&e.reason.message)||e.reason); }catch(_){}});
-log("BUILD READY v=garg-fix-17 · handlers wired");
+log("BUILD READY v=bestiary-18 · handlers wired");
 </script>
 </body>
 </html>
