@@ -198,7 +198,7 @@
 </div>
 
 <!-- ============ SETTINGS ============ -->
-<div id="settingsScreen" class="screen hidden" style="z-index:70">
+<div id="settingsScreen" class="screen hidden" style="z-index:85">
   <div class="panel" style="max-width:560px">
     <h3 data-i18n="settings_title">Settings</h3>
     <div class="setrow"><label data-i18n="lang_label">Language / Idioma</label>
@@ -4021,7 +4021,7 @@ $("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();
 /* surface any load/runtime error so we never get a silent dead UI */
 addEventListener("error",e=>{ try{ log("JS ERROR:", e.message, "@", (e.filename||"").split("/").pop()+":"+e.lineno); }catch(_){}});
 addEventListener("unhandledrejection",e=>{ try{ log("PROMISE REJECT:", (e.reason&&e.reason.message)||e.reason); }catch(_){}});
-log("BUILD READY v=bestiary-18 · handlers wired");
+log("BUILD READY v=settings-fix-19 · handlers wired");
 </script>
 </body>
 </html>
