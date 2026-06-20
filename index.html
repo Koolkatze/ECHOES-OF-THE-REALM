@@ -2165,11 +2165,13 @@ function fitModel(src,targetH){
   const holder=new THREE.Group();
   holder.add(root);
   holder.updateMatrixWorld(true);
-  // Measure height from TRUE rest-pose skinned bounds; fall back to the bind-pose box only when
-  // the rest pose is collapsed (single-clip "baselayer" rigs) — identical to the old path for them.
+  // Measure height from TRUE rest-pose skinned bounds (works for both full-size multi-clip rigs
+  // and the tiny single-clip "baselayer" rigs); only fall back if those bounds are degenerate.
   let box=skinnedRestBox(root);
   let h=box?box.getSize(new THREE.Vector3()).y:0;
-  if(!isFinite(h)||h<0.3){ box=new THREE.Box3().setFromObject(root); h=box.getSize(new THREE.Vector3()).y; if(!isFinite(h)||h<1e-3) h=1; }
+  // Only fall back when the skinned rest box is genuinely degenerate (null/zero). Single-clip
+  // "baselayer" rigs are authored TINY (~3 mm) but VALID — measure & scale them up, do not discard.
+  if(!isFinite(h)||h<1e-4){ box=new THREE.Box3().setFromObject(root); h=box.getSize(new THREE.Vector3()).y; if(!isFinite(h)||h<1e-3) h=1; }
   const sc=targetH/h;
   root.scale.setScalar(sc);
   holder.updateMatrixWorld(true);
@@ -3991,7 +3993,7 @@ $("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();
 /* surface any load/runtime error so we never get a silent dead UI */
 addEventListener("error",e=>{ try{ log("JS ERROR:", e.message, "@", (e.filename||"").split("/").pop()+":"+e.lineno); }catch(_){}});
 addEventListener("unhandledrejection",e=>{ try{ log("PROMISE REJECT:", (e.reason&&e.reason.message)||e.reason); }catch(_){}});
-log("BUILD READY v=lvlbars-16 · handlers wired");
+log("BUILD READY v=garg-fix-17 · handlers wired");
 </script>
 </body>
 </html>
