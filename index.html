@@ -68,6 +68,10 @@
     color:var(--thunder);font-family:inherit;font-size:10px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
   .ctl:active{background:rgba(232,179,58,.25)}
   .ctl.big{width:80px;height:80px;font-size:11px}
+  .ctl.guard{background:rgba(90,150,255,.32);border-color:#8fb8ff;box-shadow:0 0 14px rgba(120,170,255,.7)}
+  #guardVig{position:fixed;inset:0;pointer-events:none;z-index:35;opacity:0;transition:opacity .12s;
+    box-shadow:inset 0 0 90px rgba(90,150,255,.5),inset 0 0 200px rgba(60,110,220,.28)}
+  #guardVig.on{opacity:1}
   #leftctl{position:absolute;left:14px;bottom:max(20px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;pointer-events:auto}
   #hint{position:absolute;left:50%;bottom:max(96px,env(safe-area-inset-bottom));transform:translateX(-50%);
     font-size:12px;letter-spacing:.15em;color:#cfc2a6;text-shadow:0 1px 4px #000;text-align:center;width:92vw}
@@ -342,6 +346,7 @@
   <div id="hint"></div>
   <div id="controls">
     <button class="ctl big" id="btnAtk" data-i18n="strike">Strike</button>
+    <button class="ctl big" id="btnBlock" data-i18n="block">Guard</button>
     <button class="ctl" id="btnSpecial" data-i18n="scroll">Scroll</button>
     <button class="ctl" id="btnDodge" data-i18n="dodge">Dodge</button>
     <button class="ctl" id="btnVeil" data-i18n="veil">Veil</button>
@@ -364,6 +369,7 @@
 </div>
 <div id="dlg"><div class="who" data-i18n="herald_caps">⚡ THE HERALD</div><div class="txt" id="dlgTxt"></div><div class="tap" data-i18n="tap_cont">tap to continue ▸</div></div>
 <div id="toast"></div>
+<div id="guardVig"></div>
 <div id="dbg" style="position:fixed;left:0;right:0;bottom:0;max-height:42vh;overflow:auto;z-index:300;display:none;
   background:rgba(0,0,0,.88);color:#7CFC9A;font:11px/1.5 monospace;padding:8px;white-space:pre-wrap;border-top:1px solid #444"></div>
 <button id="dbgBtn" style="position:fixed;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);
@@ -408,7 +414,7 @@ const I18N={
     saves_title:"Saved Pilgrimages",
     menu:"Menu", save_quit:"Save & Quit", resume:"Resume", to_menu:"Main Menu",
     pause_title:"Paused",
-    strike:"Strike", scroll:"Scroll", dodge:"Dodge", recenter:"Recenter", walk:"Walk ▸",
+    strike:"Strike", block:"Guard", scroll:"Scroll", dodge:"Dodge", recenter:"Recenter", walk:"Walk ▸",
     map:"Map", lvl:"Level", invH:"HP ◆", invM:"MP ◆",
     overwrite_q:"Overwrite this saved pilgrimage?", yes:"Yes", cancel:"Cancel",
     saved_ok:"Pilgrimage saved", slot_empty:"Empty slot",
@@ -452,7 +458,7 @@ const I18N={
     saves_title:"Peregrinaciones Guardadas",
     menu:"Menú", save_quit:"Guardar y Salir", resume:"Reanudar", to_menu:"Menú Principal",
     pause_title:"En Pausa",
-    strike:"Golpear", scroll:"Pergamino", dodge:"Esquivar", recenter:"Recentrar", walk:"Andar ▸",
+    strike:"Golpear", block:"Guardia", scroll:"Pergamino", dodge:"Esquivar", recenter:"Recentrar", walk:"Andar ▸",
     map:"Mapa", lvl:"Nivel", invH:"PV ◆", invM:"PM ◆",
     overwrite_q:"¿Sobrescribir esta peregrinación guardada?", yes:"Sí", cancel:"Cancelar",
     saved_ok:"Peregrinación guardada", slot_empty:"Ranura vacía",
@@ -871,6 +877,7 @@ function initHeading(){
   }else{
     addEventListener("deviceorientation",onAbs,true);
   }
+  initMotion();
 }
 async function fetchBiomeFeatures(lat,lon,radius=1500){
   // wide net: water, green, urban, transport — used to build the micro-biome heatmap
@@ -2955,6 +2962,7 @@ function enemyCombat(e,dt){
   const canHit = gpsD<=reach && dHoriz<=reach+0.25 && dHoriz>=FIGHT_DIST-0.75;
 
   if(u._wind){
+    G._threatUntil=Math.max(G._threatUntil||0, performance.now()+Math.max(0,u.cd)*1000+150);
     u.cd-=dt;
     if(u.cd<=0){
       if(canHit)hurtPlayer(u.dmg*(u._attackMul||1), u._attackKind||'slash');
@@ -3097,6 +3105,29 @@ function specialAttack(){
   for(const e of [...G.world]) if(e.visible&&e.userData.state==="active"&&e.position.distanceTo(cp)<9) damage(e,sdmg);
 }
 let invuln=0;
+/* ---- DEFENSE: guard / block + global difficulty ---- */
+const ENEMY_DMG_MULT=2.5;          // enemies hit much harder (tune difficulty here)
+const GUARD_REDUCE=0.16;           // fraction of a blow that leaks through a held guard
+const PERFECT_GUARD_WINDOW=0.30;   // s after raising guard that fully parries (+stamina)
+const GUARD_DIST=0.42;             // XR: a hand within this of the camera (chest/face) = guarding
+let guarding=false, guardRaisedAt=0, guardBtnHeld=false;
+function setGuard(on){
+  on=!!on; if(on===guarding)return;
+  if(on)guardRaisedAt=performance.now()/1000;
+  guarding=on;
+  const b=$("btnBlock"); if(b)b.classList.toggle("guard",on);
+  const v=$("guardVig"); if(v)v.classList.toggle("on",on);
+}
+function guardSpark(perfect){
+  const col=perfect?0xfff0b0:0x8fb8ff;
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(.42,.03,8,28),
+    new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.95}));
+  ring.position.set(0,-.05,-.7).applyMatrix4(camera.matrixWorld);
+  ring.quaternion.copy(camera.quaternion); scene.add(ring);
+  ring.userData.fx={t:0,upd(dt){this.t+=dt*(perfect?3:4.5);ring.material.opacity=.95*(1-this.t);
+    ring.scale.setScalar(1+this.t*(perfect?.7:.4));if(this.t>=1){scene.remove(ring);return true;}}};
+  FX.push(ring.userData.fx);
+}
 function dodge(){
   if(G.player.st<20)return toast(curLang()==="es"?"Agotado…":"Exhausted…",800);
   G.player.st-=20;invuln=.6;updBars();Audio.sfx("dodge");toast(curLang()==="es"?"⟿ esquiva":"⟿ dodge",500);
@@ -3135,7 +3166,29 @@ function damage(tgt,d){
   }
 }
 function hurtPlayer(d,kind){
-  if(invuln>0)return;
+  if(invuln>0)return;                                   // dodge i-frames fully evade
+  d=d*ENEMY_DMG_MULT;
+  if(guarding){
+    const now=performance.now()/1000;
+    if(now-guardRaisedAt<PERFECT_GUARD_WINDOW){         // perfectly-timed parry
+      G.player.st=clamp(G.player.st+10,0,G.player.stMax);updBars();
+      Audio.sfx("dodge");guardSpark(true);
+      if(navigator.vibrate)navigator.vibrate([12,28,12]);
+      toast(curLang()==="es"?"¡Parada perfecta!":"Perfect guard!",600);
+      return;
+    }
+    const cost=Math.max(6,Math.round(d*0.6));
+    if(G.player.st>=cost){                              // absorb the brunt of the blow
+      G.player.st-=cost;
+      const leak=Math.max(1,Math.round(d*GUARD_REDUCE/(1+G.stats.defense*0.08)));
+      G.player.hp-=leak;updBars();Audio.sfx("hit");guardSpark(false);
+      if(navigator.vibrate)navigator.vibrate(18);
+      if(G.player.hp<=0)playerDie();
+      return;
+    }
+    setGuard(false);G.player.st=0;                      // stamina spent → guard breaks, full hit lands
+    toast(curLang()==="es"?"¡Guardia rota!":"Guard broken!",800);
+  }
   d=Math.max(1,Math.round(d/(1+G.stats.defense*0.08)));
   G.player.hp-=d;updBars();
   Audio.sfx("hurt");document.body.animate([{filter:"none"},{filter:"brightness(1.6) saturate(2) hue-rotate(-30deg)"},{filter:"none"}],{duration:240});
@@ -3462,10 +3515,13 @@ async function enterXR(){
     for(let i=0;i<2;i++){
       const h=renderer.xr.getHand(i);scene.add(h);xrHands.push(h);
     }
-    // controller select = attack
+    // controller select = attack · squeeze/grip = guard
     for(let i=0;i<2;i++){
       const c=renderer.xr.getController(i);
-      c.addEventListener("select",playerAttack);scene.add(c);
+      c.addEventListener("select",playerAttack);
+      c.addEventListener("squeezestart",()=>{guardBtnHeld=true;setGuard(true);});
+      c.addEventListener("squeezeend",()=>{guardBtnHeld=false;setGuard(false);});
+      scene.add(c);
     }
     session.addEventListener("end",()=>{log("xr session ended");G.xr=false;G.hitSource=null;G.hitReady=false;startCamFeed();});
     beginGame();
@@ -3524,6 +3580,46 @@ function handSwing(dt){
     lastHandPos[i].copy(p);
     if(v>Settings.swing&&swingCD<=0){swingCD=.45;playerAttack();}
   });
+}
+/* XR gesture-block: a hand brought up near the head/chest raises the guard (release / swing to drop). */
+function handGuard(dt){
+  if(!G.xr)return;
+  let near=false; const cp=camWorldPos();
+  for(const h of xrHands){
+    const J=h.joints; if(!J)continue;
+    const j=J["wrist"]||J["middle-finger-metacarpal"]||J["index-finger-tip"];
+    if(j&&j.position.distanceTo(cp)<GUARD_DIST){near=true;break;}
+  }
+  setGuard(near||guardBtnHeld);
+}
+/* Motion-dodge: a sharp head-jerk (XR camera pose) or phone-shake (accelerometer) during an
+   enemy's wind-up triggers a dodge. Gated to an incoming attack so normal motion costs nothing. */
+let lastCamQ=new THREE.Quaternion(), lastCamP=new THREE.Vector3(), camTrackInit=false, motionDodgeCD=0, _accelDev=0;
+const DODGE_TURN=6.5, DODGE_MOVE=1.7, DODGE_ACCEL=11;
+function motionDodge(dt){
+  motionDodgeCD-=dt;
+  const q=camera.quaternion, p=camWorldPos();
+  if(!camTrackInit){lastCamQ.copy(q);lastCamP.copy(p);camTrackInit=true;_accelDev*=0.5;return;}
+  const angVel=(2*Math.acos(Math.min(1,Math.abs(lastCamQ.dot(q)))))/Math.max(dt,.001);
+  const linVel=p.distanceTo(lastCamP)/Math.max(dt,.001);
+  lastCamQ.copy(q);lastCamP.copy(p);
+  const threat=performance.now()<(G._threatUntil||0);
+  if(threat&&!G._taughtGuard){G._taughtGuard=true;
+    toast(curLang()==="es"?"⚔ Mantén Guardia o Esquiva — luego Golpea":"⚔ Hold Guard or Dodge — then Strike",2600);}
+  if(threat&&motionDodgeCD<=0&&invuln<=0&&G.player.st>=20&&
+     (angVel>DODGE_TURN||linVel>DODGE_MOVE||_accelDev>DODGE_ACCEL)){
+    motionDodgeCD=0.7; dodge();
+  }
+  _accelDev*=0.6;
+}
+function initMotion(){
+  const onM=e=>{const a=e.accelerationIncludingGravity||e.acceleration;if(!a)return;
+    const mag=Math.hypot(a.x||0,a.y||0,a.z||0);_accelDev=Math.max(_accelDev,Math.abs(mag-9.81));};
+  try{
+    if(typeof DeviceMotionEvent!=="undefined"&&typeof DeviceMotionEvent.requestPermission==="function"){
+      DeviceMotionEvent.requestPermission().then(s=>{if(s==="granted")addEventListener("devicemotion",onM,true);}).catch(()=>{});
+    }else addEventListener("devicemotion",onM,true);
+  }catch(e){}
 }
 
 /* =====================================================================
@@ -3802,6 +3898,8 @@ function loop(time,xrFrame){
   for(const e of G.world) restorePosLocks(e);
   if(G.boss) restorePosLocks(G.boss);
   handSwing(dt);
+  handGuard(dt);
+  motionDodge(dt);
   renderer.render(scene,camera);
  }catch(err){
    if(!loopErrOnce){loopErrOnce=true;toast("⚠ "+(err.message||err),6000);console.error(err);}
@@ -3958,6 +4056,12 @@ updContinueBtn();applySettings();applyLang();
 $("btnAtk").onclick=playerAttack;
 $("btnSpecial").onclick=specialAttack;
 $("btnDodge").onclick=dodge;
+(function(){const b=$("btnBlock");if(!b)return;
+  const on=e=>{e.preventDefault();guardBtnHeld=true;setGuard(true);};
+  const off=()=>{guardBtnHeld=false;setGuard(false);};
+  b.addEventListener("pointerdown",on);b.addEventListener("pointerup",off);
+  b.addEventListener("pointerleave",off);b.addEventListener("pointercancel",off);
+})();
 $("btnPotH").onclick=()=>usePotion("potionH");
 $("btnPotM").onclick=()=>usePotion("potionM");
 $("btnArrive").onclick=()=>{
@@ -4021,7 +4125,7 @@ $("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();
 /* surface any load/runtime error so we never get a silent dead UI */
 addEventListener("error",e=>{ try{ log("JS ERROR:", e.message, "@", (e.filename||"").split("/").pop()+":"+e.lineno); }catch(_){}});
 addEventListener("unhandledrejection",e=>{ try{ log("PROMISE REJECT:", (e.reason&&e.reason.message)||e.reason); }catch(_){}});
-log("BUILD READY v=settings-fix-19 · handlers wired");
+log("BUILD READY v=combat-overhaul-20 · handlers wired");
 </script>
 </body>
 </html>
