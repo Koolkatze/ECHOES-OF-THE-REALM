@@ -189,8 +189,9 @@
 <div id="deathScreen" class="screen hidden">
   <h1 class="title" data-i18n="you_faded">You Faded</h1>
   <div class="rune-divider"></div>
-  <div class="small">The Herald drags your echo back through time…</div>
-  <button class="btn" id="btnRespawn" data-i18n="rise">Rise again</button>
+  <div class="small" data-i18n="death_flee_hint">Death clings to this ground. Flee the haunted zone — or recover your session from the menu.</div>
+  <div class="small" id="deathFlee" style="margin-top:8px;color:#c9a06a"></div>
+  <button class="btn" id="btnRespawn" data-i18n="to_menu">Return to menu</button>
 </div>
 
 <!-- ============ VICTORY ============ -->
@@ -414,7 +415,7 @@ const I18N={
     saves_title:"Saved Pilgrimages",
     menu:"Menu", save_quit:"Save & Quit", resume:"Resume", to_menu:"Main Menu",
     pause_title:"Paused",
-    strike:"Strike", block:"Guard", scroll:"Scroll", dodge:"Dodge", recenter:"Recenter", walk:"Walk ▸",
+    strike:"Strike", block:"Guard", death_flee_hint:"Death clings to this ground. Flee the haunted zone — or recover your session from the menu.", scroll:"Scroll", dodge:"Dodge", recenter:"Recenter", walk:"Walk ▸",
     map:"Map", lvl:"Level", invH:"HP ◆", invM:"MP ◆",
     overwrite_q:"Overwrite this saved pilgrimage?", yes:"Yes", cancel:"Cancel",
     saved_ok:"Pilgrimage saved", slot_empty:"Empty slot",
@@ -458,7 +459,7 @@ const I18N={
     saves_title:"Peregrinaciones Guardadas",
     menu:"Menú", save_quit:"Guardar y Salir", resume:"Reanudar", to_menu:"Menú Principal",
     pause_title:"En Pausa",
-    strike:"Golpear", block:"Guardia", scroll:"Pergamino", dodge:"Esquivar", recenter:"Recentrar", walk:"Andar ▸",
+    strike:"Golpear", block:"Guardia", death_flee_hint:"La muerte se aferra a esta tierra. Huye de la zona maldita — o recupera tu sesión desde el menú.", scroll:"Pergamino", dodge:"Esquivar", recenter:"Recentrar", walk:"Andar ▸",
     map:"Mapa", lvl:"Nivel", invH:"PV ◆", invM:"PM ◆",
     overwrite_q:"¿Sobrescribir esta peregrinación guardada?", yes:"Sí", cancel:"Cancelar",
     saved_ok:"Peregrinación guardada", slot_empty:"Ranura vacía",
@@ -663,7 +664,7 @@ function snapshot(){
   return {legend:G.legend,spots:G.spots,spotIndex:G.spotIndex,player:G.player,
     inv:G.inv,equippedW:G.equipped.weapon?G.equipped.weapon.id:null,
     equippedS:G.equipped.scroll?G.equipped.scroll.id:null,
-    demo:G.demo,env:G.env,stats:G.stats,kills:G.kills,heat:HEAT,heatCenter:G.heatCenter,noteIdx:G._noteIdx||0,when:Date.now(),
+    demo:G.demo,env:G.env,stats:G.stats,kills:G.kills,heat:Object.assign({},HEAT,{areas:undefined}),heatCenter:G.heatCenter,noteIdx:G._noteIdx||0,when:Date.now(),
     region:G.legend?G.legend.regionName:"?"};
 }
 let activeSlot=null;
@@ -685,7 +686,7 @@ function loadSlot(n){
   G.legend=d.legend;G.spots=d.spots;G.spotIndex=Math.min(d.spotIndex,d.spots.length-1);
   G.player=d.player;G.inv=d.inv;G.demo=false;G._noteIdx=d.noteIdx; // demo removed: old demo saves load as GPS
   G.env=d.env||"town";if(d.stats)G.stats=d.stats;G.kills=d.kills||{};applyStats();
-  if(d.heat&&d.heat.grid){Object.assign(HEAT,d.heat);}G.heatCenter=d.heatCenter||null;
+  if(d.heat&&d.heat.grid){Object.assign(HEAT,d.heat);rebuildAreas();}G.heatCenter=d.heatCenter||null;G.dead=false;
   G.equipped.weapon=G.inv.find(i=>i.id===d.equippedW)||null;
   G.equipped.scroll=G.inv.find(i=>i.id===d.equippedS)||null;
   return true;
@@ -789,7 +790,7 @@ $("btnPauseMenu").onclick=()=>{ // leave without saving — confirm to avoid los
 
 /* tear down the live game and show the title screen */
 function exitToMenu(){
-  G._paused=false;G.invisible=false;if($("btnVeil"))$("btnVeil").classList.remove("on");if($("veilTint"))$("veilTint").classList.remove("on");
+  G._paused=false;G.invisible=false;G.dead=false;if($("btnVeil"))$("btnVeil").classList.remove("on");if($("veilTint"))$("veilTint").classList.remove("on");
   // stop XR session if active
   try{ if(G.xr&&renderer.xr.getSession){renderer.xr.getSession().end();} }catch(e){}
   // hide all overlays
@@ -924,7 +925,7 @@ const MICRO_TO_ENV={water:"beach",beach:"beach",forest:"wilderness",mountain:"wi
    Each cell gets a dominant micro-biome + a heat value (0..1).
    Red(>.66)=many enemies, Yellow(.33-.66)=some, Green(<.33)=few.
    ===================================================================== */
-const HEAT={grid:[],cols:0,rows:0,cell:0,lat0:0,lon0:0,latSpan:0,lonSpan:0,clusters:[]};
+const HEAT={grid:[],cols:0,rows:0,cell:0,lat0:0,lon0:0,latSpan:0,lonSpan:0,clusters:[],areas:{}};
 function metersPerDeg(lat){return {mlat:111320,mlon:111320*Math.cos(lat*Math.PI/180)};}
 function buildHeatmap(features,centerLat,centerLon,radius){
   const N=12; // 12x12 grid
@@ -1005,17 +1006,46 @@ function buildClusters(){
   for(let r=0;r<HEAT.rows;r++)for(let c=0;c<HEAT.cols;c++){
     const cell=HEAT.grid[r][c];
     if(cell.heat<0.05)continue; // skip only truly empty
-    // enemy count scales with heat: green ~6, yellow ~13, red ~21 (denser zones)
     const n=Math.max(5,Math.round(5+cell.heat*16));
     const [lat,lon]=cellCenterLatLon(r,c);
     const env=MICRO_TO_ENV[cell.biome]||"town";
-    HEAT.clusters.push({lat,lon,baseCount:n,count:n,heat:cell.heat,biome:cell.biome,env,cleared:false,clearedAt:0});
+    HEAT.clusters.push({r,c,lat,lon,baseCount:n,count:n,heat:cell.heat,biome:cell.biome,env,cleared:false,clearedAt:0,areaId:null});
   }
-  // sort by heat so red zones are most prominent on the map
   HEAT.clusters.sort((a,b)=>b.heat-a.heat);
-  log("heatmap:",HEAT.clusters.length,"enemy clusters · hottest",
-    (HEAT.clusters[0]?.count||0),"foes");
+  rebuildAreas();
+  log("heatmap:",HEAT.clusters.length,"cells ·",Object.keys(HEAT.areas).length,
+    "areas · hottest",(HEAT.clusters[0]?.count||0),"foes");
 }
+/* Group 8-connected coloured cells into AREAS. A vial only refills when an entire
+   area (all its green/yellow/red cells) has been wiped out. Only cell.areaId (a number)
+   is stored on the grid so saves stay lean; HEAT.areas is rebuilt on load. */
+function rebuildAreas(){
+  HEAT.areas={};
+  if(!HEAT.grid||!HEAT.rows)return;
+  for(let r=0;r<HEAT.rows;r++)for(let c=0;c<HEAT.cols;c++){const cell=HEAT.grid[r]&&HEAT.grid[r][c];if(cell)cell.areaId=null;}
+  const clAt={};
+  for(const cl of HEAT.clusters){ if(cl.r!=null)clAt[cl.r+"_"+cl.c]=cl; }
+  let aid=0;
+  for(let r0=0;r0<HEAT.rows;r0++)for(let c0=0;c0<HEAT.cols;c0++){
+    const cell0=HEAT.grid[r0][c0];
+    if(!cell0||cell0.heat<0.05||cell0.areaId!=null)continue;
+    const id=aid++, members=[], stack=[[r0,c0]]; cell0.areaId=id;
+    while(stack.length){
+      const [r,c]=stack.pop(); const cell=HEAT.grid[r][c];
+      const cl=clAt[r+"_"+c]; if(cl){members.push(cl);cl.areaId=id;}
+      for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+        if(!dr&&!dc)continue; const nr=r+dr,nc=c+dc;
+        if(nr<0||nc<0||nr>=HEAT.rows||nc>=HEAT.cols)continue;
+        const nb=HEAT.grid[nr][nc];
+        if(nb&&nb.heat>=0.05&&nb.areaId==null){nb.areaId=id;stack.push([nr,nc]);}
+      }
+    }
+    const cleared=members.length>0&&members.every(m=>m.cleared);
+    HEAT.areas[id]={id,clusters:members,killed:0,cleared,clearedAt:cleared?Date.now():0};
+  }
+  for(const id in HEAT.areas){const a=HEAT.areas[id];if(a.cleared)a.killed=areaQuota(a);}
+}
+function areaQuota(a){ return a&&a.clusters?a.clusters.reduce((s,cl)=>s+dangerCount(cl),0):0; }
 function heatColor(h){ // green→yellow→red
   if(h<0.33)return "#3aa860";
   if(h<0.66)return "#e8b33a";
@@ -1278,11 +1308,12 @@ function refreshRespawns(lat,lon){
     const away=(lat==null)||haversine(lat,lon,cl.lat,cl.lon)>RESPAWN_DIST;
     if(away&&now-cl.clearedAt>RESPAWN_MS){
       cl.cleared=false;cl.clearedAt=0;cl.count=dangerCount(cl);changed=true;
+      if(cl.areaId!=null&&HEAT.areas[cl.areaId]){const _a=HEAT.areas[cl.areaId];_a.cleared=false;_a.killed=0;_a.clearedAt=0;}
       if(G.worldBuilt){const n=cl.count;for(let i=0;i<n;i++){
         const type=pickClusterType(cl);const ang=Math.random()*6.28,rad=rand(4,18);
         let [elat,elon]=offsetLatLon(cl.lat,cl.lon,Math.sin(ang)*rad,Math.cos(ang)*rad);
         [elat,elon]=safeSpawnLatLon(elat,elon);
-        makeWorldEnemy(type,elat,elon).userData.cluster=cl;}}
+        {const _e=makeWorldEnemy(type,elat,elon);_e.userData.cluster=cl;_e.userData.areaId=cl.areaId;}}}
     }
   }
   if(changed){G._heatDirty=true;autosave();}
@@ -1298,7 +1329,7 @@ function cellAt(lat,lon){
 // so you always meet foes in a red zone regardless of how far the cluster centre is.
 let _liveSpawnT=0;
 function liveSpawnNearby(){
-  if(G.lat==null||G.demo)return;
+  if(G.lat==null||G.demo||G.dead)return;
   if(G._worldSpawnAllowedAt && performance.now()<G._worldSpawnAllowedAt)return;
   const {mlat,mlon}=metersPerDeg(G.lat);
   // Use the heat map as authority. Do NOT keep a fake minimum pack around the player:
@@ -1313,6 +1344,10 @@ function liveSpawnNearby(){
     if(G._dbgOn) log("live-check: cold cell · no live spawn · heat=",heat.toFixed(2),"cell=",!!cell,"nearestCl=",bd<9999?bd.toFixed(0)+"m":"none");
     return;
   }
+  let liveArea=null;
+  if(cell&&cell.areaId!=null&&HEAT.areas[cell.areaId])liveArea=HEAT.areas[cell.areaId];
+  else if(best&&best.areaId!=null&&bd<140&&HEAT.areas[best.areaId])liveArea=HEAT.areas[best.areaId];
+  if(liveArea&&liveArea.cleared)return;   // whole area already wiped — it stays quiet
   // Count only safe visible foes. A foe inside the hard personal-space ring does NOT satisfy
   // the spawn quota; it is a bug candidate and updateWorld will push it out.
   let nearby=0;
@@ -1329,7 +1364,7 @@ function liveSpawnNearby(){
     const ang=Math.random()*6.28, rad=rand(SAFE_SPAWN_MIN,SAFE_SPAWN_MAX);
     const [elat,elon]=offsetLatLon(G.lat,G.lon,Math.cos(ang)*rad,Math.sin(ang)*rad);
     const e=makeWorldEnemy(choice(pool),elat,elon);
-    e.userData.cluster={lat:G.lat,lon:G.lon,biome:biome||env,heat,env,cleared:false,clearedAt:0,_live:true};
+    e.userData.areaId=liveArea?liveArea.id:null;
     e.userData.spawnGrace=performance.now()+SPAWN_GRACE_MS;
     made++;
   }
@@ -2554,7 +2589,7 @@ function buildWorld(){
       const ang=Math.random()*6.28, rad=rand(10,28);
       let [elat,elon]=offsetLatLon(cl.lat,cl.lon,Math.cos(ang)*rad,Math.sin(ang)*rad);
       [elat,elon]=safeSpawnLatLon(elat,elon);
-      makeWorldEnemy(type,elat,elon).userData.cluster=cl;
+      {const _e=makeWorldEnemy(type,elat,elon);_e.userData.cluster=cl;_e.userData.areaId=cl.areaId;}
     }
   }
   // 2) boss at the final spot
@@ -2954,7 +2989,7 @@ function animEnemy(e,dt,t){
 function enemyCombat(e,dt){
   // movement/positioning is handled by updateWorld; this only times attack windup + damage.
   const u=e.userData;
-  if(u._spawnBlocked)return;
+  if(G.dead||u._spawnBlocked)return;
   const _cp=camWorldPos();
   const dHoriz=Math.hypot(_cp.x-e.position.x,_cp.z-e.position.z);
   const gpsD=isFinite(u._gpsDist)?u._gpsDist:dHoriz;
@@ -3074,6 +3109,7 @@ function lootRoll(kind){
   return choice(ITEM_POOL.filter(i=>i.slot==="potionH"||i.slot==="potionM"));
 }
 function playerAttack(){
+  if(G.dead)return;
   const w=G.equipped.weapon;
   let dmg=(w?w.dmg:6)+G.stats.attack*3;
   if(Math.random()<G.stats.strike*0.05){dmg=Math.round(dmg*2.2);toast(curLang()==="es"?"¡Crítico!":"Critical!",600);}
@@ -3129,6 +3165,7 @@ function guardSpark(perfect){
   FX.push(ring.userData.fx);
 }
 function dodge(){
+  if(G.dead)return;
   if(G.player.st<20)return toast(curLang()==="es"?"Agotado…":"Exhausted…",800);
   G.player.st-=20;invuln=.6;updBars();Audio.sfx("dodge");toast(curLang()==="es"?"⟿ esquiva":"⟿ dodge",500);
 }
@@ -3149,12 +3186,18 @@ function damage(tgt,d){
       const sr=u.souls||10;G.player.souls+=sr;toast((curLang()==="es"?"Eco absorbido +":"Echo absorbed +")+sr);
       const k=u.kind||"husk";G.kills[k]=(G.kills[k]||0)+1;
       if(Math.random()<.5) giveItem(lootRoll("pot"));
-      const cl=u.cluster;
+      const aid=u.areaId;
       const removeNow=()=>{scene.remove(tgt);G.world=G.world.filter(x=>x!==tgt);G.enemies=G.enemies.filter(x=>x!==tgt);
-        if(cl&&!G.world.some(w=>w.userData.cluster===cl&&!w.userData.dead)){
-          cl.cleared=true;cl.clearedAt=Date.now();G._heatDirty=true;
-          G.player.hp=G.player.hpMax;G.player.mp=G.player.mpMax;G.player.st=G.player.stMax;updBars();
-          Audio.sfx("loot");toast(zoneName(cl.biome)+" — "+t("bars_restore"),2200);autosave();
+        const area=(aid!=null)?HEAT.areas[aid]:null;
+        if(area && !area.cleared){
+          area.killed=(area.killed||0)+1;
+          if(area.killed>=areaQuota(area)){             // every foe of the whole area is slain
+            area.cleared=true;area.clearedAt=Date.now();
+            for(const c2 of (area.clusters||[])){c2.cleared=true;c2.clearedAt=Date.now();}
+            G._heatDirty=true;
+            G.player.hp=G.player.hpMax;G.player.mp=G.player.mpMax;G.player.st=G.player.stMax;updBars();
+            Audio.sfx("loot");toast(zoneName(((area.clusters||[])[0]||{}).biome||G.env)+" — "+t("bars_restore"),2400);autosave();
+          }
         }};
       if(u.hasClips && !u.walkOnly){const dd=deathAnim(tgt); u.state="dead";
         // freeze it in place during the death animation, then remove
@@ -3166,7 +3209,7 @@ function damage(tgt,d){
   }
 }
 function hurtPlayer(d,kind){
-  if(invuln>0)return;                                   // dodge i-frames fully evade
+  if(invuln>0||G.dead)return;                                   // dodge i-frames fully evade
   d=d*ENEMY_DMG_MULT;
   if(guarding){
     const now=performance.now()/1000;
@@ -3439,13 +3482,43 @@ function bossDown(){
   show("winScreen");$("hud").style.display="none";
 }
 function playerDie(){
-  endVeil();clearEncounter();$("hud").style.display="none";show("deathScreen");
+  if(G.dead)return;
+  G.dead=true; endVeil(); $("hud").style.display="none";
+  // remember which area you fell in — death persists until you flee it (or recover the session)
+  G._deathArea=null;
+  if(G.lat!=null){ const cell=cellAt(G.lat,G.lon);
+    if(cell&&cell.areaId!=null)G._deathArea=cell.areaId;
+    else{const b=nearestCluster(G.lat,G.lon);if(b&&b.areaId!=null)G._deathArea=b.areaId;} }
+  for(const id in HEAT.areas){ if(!HEAT.areas[id].cleared)HEAT.areas[id].killed=0; } // lose grip on unfinished areas
+  updDeathFlee();
+  show("deathScreen");
 }
-$("btnRespawn").onclick=()=>{
-  hide("deathScreen");
-  Object.assign(G.player,{hp:G.player.hpMax,mp:G.player.mpMax,st:G.player.stMax});
-  updBars();$("hud").style.display="block";startTravel();
-};
+function stillInHaunt(lat,lon){
+  if(lat==null)return true;
+  if(G._deathArea!=null && HEAT.areas[G._deathArea]){
+    const a=HEAT.areas[G._deathArea], cell=cellAt(lat,lon);
+    if(cell&&cell.areaId===G._deathArea)return true;
+    for(const cl of (a.clusters||[])) if(haversine(lat,lon,cl.lat,cl.lon)<Math.max(HEAT.cell,50))return true;
+    return false;
+  }
+  const cell=cellAt(lat,lon); if(cell&&cell.heat>=0.08)return true;
+  for(const cl of HEAT.clusters) if(haversine(lat,lon,cl.lat,cl.lon)<Math.max(HEAT.cell,50))return true;
+  return false;
+}
+function updDeathFlee(){
+  const el=$("deathFlee"); if(!el)return; const es=curLang()==="es";
+  el.textContent = stillInHaunt(G.lat,G.lon)
+    ? (es?"Aún atado a la tierra maldita — huye hasta que el mapa se enfríe.":"Still bound to the cursed ground — flee until the map runs cold.")
+    : (es?"El aire se aclara… te liberas.":"The air clears… you pull free.");
+}
+function reviveFromFlee(){
+  if(!G.dead)return;
+  G.dead=false; G._deathArea=null;
+  Object.assign(G.player,{hp:G.player.hpMax,mp:G.player.mpMax,st:G.player.stMax});updBars();
+  hide("deathScreen");$("hud").style.display="block";
+  Audio.sfx("loot");toast(curLang()==="es"?"Escapas de la tierra maldita.":"You crawl free of the cursed ground.",2600);autosave();
+}
+$("btnRespawn").onclick=()=>{ exitToMenu(); };  // recover the session from the menu (Continue reloads your save)
 
 /* =====================================================================
    6. INVENTORY UI
@@ -3635,6 +3708,7 @@ function watchGPS(){
     if(p.coords.heading!=null&&(p.coords.speed||0)>0.6)G._gpsCourse=p.coords.heading;
     G._lastFixT=performance.now();
     if(G.lat==null){G.lat=p.coords.latitude;G.lon=p.coords.longitude;} // first fix snaps
+    if(G.dead){ if(!stillInHaunt(p.coords.latitude,p.coords.longitude))reviveFromFlee(); else updDeathFlee(); }
   },e=>{if(e.code===1&&!G._gpsWarned){G._gpsWarned=true;toast("Location permission lost — re-enable it in Chrome site settings",4000);}},
   {enableHighAccuracy:true,maximumAge:0});          // freshest possible fixes
 }
@@ -3995,7 +4069,7 @@ $("btnEnterFlat").onclick=()=>{hide("questScreen");enterFlat();};
   if(!ok){ $("btnEnterAR").style.display="none";
     $("btnEnterFlat").textContent="Enter the Realm (camera)"; }
 })();
-function beginGame(){
+function beginGame(){ G.dead=false;
   log("beginGame · xr:",G.xr,"· intro lines:",G.legend.intro.length);applySettings();Audio.startMusic();
   G._worldGrace=performance.now()+8000; G._worldSpawnAllowedAt=performance.now()+9000;
   buildWorld();
@@ -4125,7 +4199,7 @@ $("c").addEventListener("click",()=>{if(G.encounterActive&&!G.xr)playerAttack();
 /* surface any load/runtime error so we never get a silent dead UI */
 addEventListener("error",e=>{ try{ log("JS ERROR:", e.message, "@", (e.filename||"").split("/").pop()+":"+e.lineno); }catch(_){}});
 addEventListener("unhandledrejection",e=>{ try{ log("PROMISE REJECT:", (e.reason&&e.reason.message)||e.reason); }catch(_){}});
-log("BUILD READY v=combat-overhaul-20 · handlers wired");
+log("BUILD READY v=zone-heal-death-21 · handlers wired");
 </script>
 </body>
 </html>
